@@ -52,4 +52,4 @@ The release job fails when `ANDROID_KEYSTORE_BASE64` is missing. To rebuild the 
 
 ## Updates
 
-Customize > Check for updates reads `releases/latest` from this repo and picks the APK whose name contains the device ABI. It downloads the APK and hands it to the system installer. The first time, you have to allow installs from TV Home in the system settings, and you confirm each install. Keep the full ABI string in the asset names, because installed apps match on it.
+Customize > Check for updates follows the `releases/latest` redirect of this repo, so it doesn't use the GitHub API and its per-IP rate limit. It then downloads `tvhome-<version>-<abi>.apk` for the device ABI and hands it to the system installer. A failure shows its reason in the toast and in `logcat` under the `tvhome` tag. The first time, you have to allow installs from TV Home in the system settings, and you confirm each install. Keep the full ABI string in the asset names, because installed apps match on it.

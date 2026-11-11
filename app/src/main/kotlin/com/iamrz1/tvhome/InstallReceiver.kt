@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.util.Log
 import android.widget.Toast
 
 class InstallReceiver : BroadcastReceiver() {
@@ -17,6 +18,7 @@ class InstallReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_SUCCESS -> Unit
             else -> {
                 val reason = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                Log.e("tvhome", "install failed: status=${intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)} $reason")
                 Toast.makeText(ctx, "Update failed: $reason", Toast.LENGTH_LONG).show()
             }
         }
