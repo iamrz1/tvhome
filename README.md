@@ -4,11 +4,13 @@ A small Android TV home launcher. It has a wallpaper gradient, a top bar with a 
 
 ## Customize
 
-Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the dialogs.
+Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light), the focus highlight (Line or Glow) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock and the all apps screen. Menus use the light panel of the stock launcher in every theme.
 
 ## Dock
 
-Hold OK on an app, in the dock or in all apps, to open its menu. A dock app can move left or right or be removed. Any other app can be added to the dock. The dock holds 5 apps, and adding a sixth shows "Dock is full right now".
+Hold OK on an app, in the dock or in all apps, to open its menu. A dock app has Move and Remove from dock. Any other app has Add to dock. The dock holds 5 apps, and adding a sixth shows "Dock is full right now".
+
+Move selects the app. Press Left or Right to move it along the dock, then Back (or OK) to finish. Home on the home screen does nothing.
 
 ## Build
 

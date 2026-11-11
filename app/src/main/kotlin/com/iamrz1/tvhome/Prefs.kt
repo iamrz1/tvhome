@@ -9,6 +9,11 @@ enum class PillItem(val label: String) {
     SETTINGS("Settings"),
 }
 
+enum class FocusStyle(val label: String) {
+    LINE("Line"),
+    GLOW("Glow"),
+}
+
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("tvhome", Context.MODE_PRIVATE)
 
@@ -19,6 +24,10 @@ class Prefs(context: Context) {
     var themeMode: ThemeMode
         get() = ThemeMode.entries.getOrElse(sp.getInt(KEY_THEME, ThemeMode.DARK.ordinal)) { ThemeMode.DARK }
         set(v) = sp.edit().putInt(KEY_THEME, v.ordinal).apply()
+
+    var focusStyle: FocusStyle
+        get() = FocusStyle.entries.getOrElse(sp.getInt(KEY_FOCUS, FocusStyle.LINE.ordinal)) { FocusStyle.LINE }
+        set(v) = sp.edit().putInt(KEY_FOCUS, v.ordinal).apply()
 
     var dock: List<String>
         get() = sp.getString(KEY_DOCK, null)?.split(',')?.filter { it.isNotEmpty() } ?: DEFAULT_DOCK
@@ -35,6 +44,7 @@ class Prefs(context: Context) {
     companion object {
         private const val KEY_WALLPAPER = "wallpaper"
         private const val KEY_THEME = "theme"
+        private const val KEY_FOCUS = "focus"
         private const val KEY_DOCK = "dock"
         private const val KEY_PILL = "pill"
 
