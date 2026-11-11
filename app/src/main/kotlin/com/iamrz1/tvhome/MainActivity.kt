@@ -142,43 +142,42 @@ class MainActivity : Activity() {
 
     private fun glowStyle() = prefs.focusStyle == FocusStyle.GLOW
 
-    // what a focused tile or button shows on top of itself: a line around it, or a soft fill for the glow
-    private fun focusMark(radiusDp: Int, oval: Boolean = false): Drawable {
+    // what a focused top bar button shows: a ring, or a soft radial glow
+    private fun pillMark(): Drawable {
         val active = GradientDrawable().apply {
-            if (oval) shape = GradientDrawable.OVAL else cornerRadius = dp(radiusDp).toFloat()
-            if (glowStyle() && oval) {
+            shape = GradientDrawable.OVAL
+            if (glowStyle()) {
                 gradientType = GradientDrawable.RADIAL_GRADIENT
                 gradientRadius = dp(23).toFloat()
-                colors = intArrayOf(withAlpha(palette.focus, 0x40), withAlpha(palette.focus, 0x00))
+                colors = intArrayOf(withAlpha(Color.WHITE, 0x59), withAlpha(Color.WHITE, 0x00))
             } else {
                 setColor(palette.focusFill)
-                if (!glowStyle()) setStroke(dp(3), palette.focus)
+                setStroke(dp(3), palette.focus)
             }
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), active)
-            addState(intArrayOf(android.R.attr.state_selected), active)
             addState(intArrayOf(), GradientDrawable())
         }
     }
 
-    // the halo around a dock or grid cell, shown while its tile is focused (activated) or selected
-    private fun glowBackground(): Drawable? {
-        if (!glowStyle()) return null
-        val glow = GlowDrawable(palette.focus, dp(14).toFloat(), GLOW.toFloat())
+    // What a dock or grid cell draws behind its tile while the tile is focused (activated) or selected. Both styles
+    // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
+    private fun cellBackground(): Drawable {
+        val mark: Drawable = if (glowStyle()) {
+            GlowDrawable(withAlpha(Color.WHITE, 0xC0), dp(14).toFloat(), dp(10).toFloat(), TILE_W, TILE_H)
+        } else {
+            ringFrame(palette.focus, 3)
+        }
         return StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_activated), glow)
-            addState(intArrayOf(android.R.attr.state_selected), glow)
+            addState(intArrayOf(android.R.attr.state_activated), mark)
+            addState(intArrayOf(android.R.attr.state_selected), mark)
             addState(intArrayOf(), GradientDrawable())
         }
     }
 
-    // the frame stock launcher draws around the app being moved
-    private fun movingFrame(): Drawable = GradientDrawable().apply {
-        cornerRadius = dp(14).toFloat()
-        setStroke(dp(4), Color.WHITE)
-        setColor(Color.parseColor("#1AFFFFFF"))
-    }
+    private fun ringFrame(color: Int, strokeDp: Int) =
+        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), dp(14).toFloat(), TILE_W, TILE_H)
 
     private fun scaleTo(v: View, active: Boolean, factor: Float = FOCUS_SCALE) {
         val s = if (active) factor else 1f
@@ -232,7 +231,7 @@ class MainActivity : Activity() {
         setPadding(dp(10), dp(10), dp(10), dp(10))
         layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(4); marginEnd = dp(4) }
         isFocusable = true
-        foreground = focusMark(0, oval = true)
+        foreground = pillMark()
         setOnClickListener { onClick() }
         setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) palette.focus else palette.muted) }
     }
@@ -255,7 +254,7 @@ class MainActivity : Activity() {
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(11), dp(8), dp(11), dp(8))
         }
         dockScroll.addView(dockRow)
         root.addView(
@@ -300,7 +299,6 @@ class MainActivity : Activity() {
     private fun bindTile(tile: FrameLayout, app: AppEntry) {
         tile.removeAllViews()
         tile.background = round(palette.tile, 14)
-        tile.foreground = focusMark(14)
         val banner = app.info.activityInfo.loadBanner(packageManager)
         if (banner != null) {
             tile.addView(ImageView(this).apply {
@@ -331,13 +329,14 @@ class MainActivity : Activity() {
         )
     }
 
-    // a dock cell is the tile plus room around it for the glow. The cell scales, so the glow scales with the tile.
+    // A dock cell is the tile plus room around it for the highlight. The cell scales, so the highlight scales with the
+    // tile. The negative side margins let cells overlap their room, which leaves GAP between two tiles.
     private fun dockCell(app: AppEntry): View {
         val cell = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(TILE_W + 2 * GLOW, TILE_H + 2 * GLOW)
-                .apply { setMargins(-GLOW / 2, -GLOW / 2, -GLOW / 2, -GLOW / 2) }
+            layoutParams = LinearLayout.LayoutParams(TILE_W + 2 * ROOM, TILE_H + 2 * ROOM)
+                .apply { setMargins(GAP / 2 - ROOM, 0, GAP / 2 - ROOM, 0) }
             clipChildren = false
-            background = glowBackground()
+            background = cellBackground()
         }
         val tile = newTile().apply {
             bindTile(this, app)
@@ -390,10 +389,11 @@ class MainActivity : Activity() {
         for (i in 0 until dockRow.childCount) {
             dockRow.getChildAt(i).animate().alpha(if (i == idx) 1f else 0.5f).setDuration(120).start()
         }
-        val tile = tileOf(dockRow.getChildAt(idx)) ?: return
-        tile.foreground = movingFrame()
+        val cell = dockRow.getChildAt(idx)
+        val tile = tileOf(cell) ?: return
+        cell.background = ringFrame(Color.WHITE, 4)
         tile.requestFocus()
-        scaleTo(dockRow.getChildAt(idx), true, MOVE_SCALE)
+        scaleTo(cell, true, MOVE_SCALE)
     }
 
     private fun moveBy(delta: Int) {
@@ -415,7 +415,7 @@ class MainActivity : Activity() {
         movingPkg = null
         for (i in 0 until dockRow.childCount) dockRow.getChildAt(i).animate().alpha(1f).setDuration(120).start()
         val cell = dockRow.getChildAt(visibleDock().indexOf(pkg)) ?: return
-        tileOf(cell)?.foreground = focusMark(14)
+        cell.background = cellBackground()
         scaleTo(cell, tileOf(cell)?.isFocused == true)
     }
 
@@ -561,20 +561,22 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val cell = (convertView as? FrameLayout) ?: FrameLayout(this@MainActivity).apply {
-                layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * GLOW)
+                layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM)
                 clipChildren = false
                 addView(newTile(), FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
             }
-            cell.background = glowBackground()
+            cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
             return cell
         }
     }
 
-    private val TILE_W by lazy { dp(168) }
-    private val TILE_H by lazy { dp(94) }
+    // five tiles and four gaps fit the dock, and ROOM around a tile is what the highlight can use
+    private val TILE_W by lazy { dp(156) }
+    private val TILE_H by lazy { dp(88) }
+    private val ROOM by lazy { dp(12) }
+    private val GAP by lazy { dp(18) }
     private val SLIDE by lazy { dp(40) }
-    private val GLOW by lazy { dp(8) }
 
     private companion object {
         // the dock fits this many tiles on one screen
