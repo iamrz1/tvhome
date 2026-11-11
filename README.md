@@ -1,10 +1,14 @@
 # tvhome
 
-A small Android TV home launcher. It has a wallpaper gradient, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid.
+A small Android TV home launcher. It has a wallpaper gradient, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
 
 ## Customize
 
-Select the sliders icon in the top bar. From there you can choose the dock apps, the wallpaper, the theme (Auto, Dark or Light) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the dialogs. Hold OK on a dock tile to move or remove it.
+Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the dialogs.
+
+## Dock
+
+Hold OK on an app, in the dock or in all apps, to open its menu. A dock app can move left or right or be removed. Any other app can be added to the dock. The dock holds 5 apps, and adding a sixth shows "Dock is full right now".
 
 ## Build
 

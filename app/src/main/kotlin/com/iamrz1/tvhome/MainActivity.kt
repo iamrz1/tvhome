@@ -20,6 +20,8 @@ import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.ViewOutlineProvider
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.widget.AbsListView
 import android.widget.AdapterView
 import android.widget.BaseAdapter
@@ -48,6 +50,8 @@ class MainActivity : Activity() {
     private val icons = HashMap<String, Drawable>()
     private var selectedCell: View? = null
     private var apps: List<AppEntry> = emptyList()
+    private var allAppsOpen = false
+    private var dockFocus = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,15 +85,20 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (allAppsVisible()) hideAllApps()
+        if (allAppsOpen) hideAllApps()
     }
 
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
-        if (e.action == KeyEvent.ACTION_DOWN && e.keyCode == KeyEvent.KEYCODE_DPAD_DOWN &&
-            !allAppsVisible() && currentFocus?.parent === dockRow
-        ) {
-            showAllApps()
-            return true
+        if (e.action == KeyEvent.ACTION_DOWN) {
+            if (e.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && !allAppsOpen && currentFocus?.parent === dockRow) {
+                showAllApps()
+                return true
+            }
+            // up from the first row of the grid goes back to the dock screen
+            if (e.keyCode == KeyEvent.KEYCODE_DPAD_UP && allAppsOpen && grid.selectedItemPosition in 0 until COLUMNS) {
+                hideAllApps()
+                return true
+            }
         }
         return super.dispatchKeyEvent(e)
     }
@@ -226,7 +235,7 @@ class MainActivity : Activity() {
             textSize = 18f
             setPadding(dp(16), dp(16), dp(16), dp(16))
         })
-        if (!allAppsVisible()) {
+        if (!allAppsOpen) {
             dockRow.getChildAt(focusIndex.coerceIn(0, dockRow.childCount - 1))?.requestFocus()
         }
     }
@@ -275,29 +284,47 @@ class MainActivity : Activity() {
         bindTile(this, app)
         isFocusable = true
         setOnClickListener { Apps.launch(context, app) }
-        setOnLongClickListener { showDockMenu(app); true }
+        setOnLongClickListener { showAppMenu(app); true }
         setOnFocusChangeListener { v, f -> scaleTo(v, f) }
     }
 
-    private fun showDockMenu(app: AppEntry) {
+    private fun showAppMenu(app: AppEntry) {
         val dock = visibleDock().toMutableList()
         val i = dock.indexOf(app.pkg)
-        val options = arrayOf("Move left", "Move right", "Remove from dock")
-        builder().setTitle(app.label).setItems(options) { _, which ->
-            var focus = i
-            when (which) {
-                0 -> if (i > 0) { Collections.swap(dock, i, i - 1); focus = i - 1 }
-                1 -> if (i < dock.size - 1) { Collections.swap(dock, i, i + 1); focus = i + 1 }
-                2 -> dock.removeAt(i)
+        val actions = ArrayList<Pair<String, () -> Unit>>()
+        if (i >= 0) {
+            if (i > 0) actions += "Move left" to { moveInDock(dock, i, i - 1) }
+            if (i < dock.size - 1) actions += "Move right" to { moveInDock(dock, i, i + 1) }
+            actions += "Remove from dock" to {
+                dock.removeAt(i)
+                prefs.dock = dock
+                rebuildDock(i)
             }
-            prefs.dock = dock
-            rebuildDock(focus)
-        }.show()
+        } else {
+            actions += "Add to dock" to {
+                if (dock.size >= MAX_DOCK) {
+                    Toast.makeText(this, "Dock is full right now", Toast.LENGTH_SHORT).show()
+                } else {
+                    dock.add(app.pkg)
+                    prefs.dock = dock
+                    rebuildDock()
+                }
+            }
+        }
+        builder().setTitle(app.label)
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
+            .show()
+    }
+
+    private fun moveInDock(dock: MutableList<String>, from: Int, to: Int) {
+        Collections.swap(dock, from, to)
+        prefs.dock = dock
+        rebuildDock(to)
     }
 
     private fun buildAllApps() {
         grid = GridView(this).apply {
-            numColumns = 5
+            numColumns = COLUMNS
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             verticalSpacing = dp(4)
             selector = ColorDrawable(Color.TRANSPARENT)
@@ -335,38 +362,44 @@ class MainActivity : Activity() {
         root.addView(allApps, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    private fun allAppsVisible() = allApps.visibility == View.VISIBLE
-
     private fun showAllApps() {
-        pill.visibility = View.INVISIBLE
-        dockScroll.visibility = View.INVISIBLE
+        if (allAppsOpen) return
+        allAppsOpen = true
+        dockFocus = dockRow.indexOfChild(currentFocus).coerceAtLeast(0)
+        setHomeFocusable(false)
         allApps.visibility = View.VISIBLE
+        allApps.alpha = 0f
+        allApps.translationY = SLIDE.toFloat()
+        allApps.animate().alpha(1f).translationY(0f).setDuration(ANIM_MS)
+            .setInterpolator(DecelerateInterpolator()).start()
+        pill.animate().alpha(0f).setDuration(ANIM_MS).start()
+        dockScroll.animate().alpha(0f).setDuration(ANIM_MS).start()
         grid.setSelection(0)
         grid.requestFocus()
     }
 
     private fun hideAllApps() {
-        if (!allAppsVisible()) return
-        allApps.visibility = View.GONE
-        pill.visibility = View.VISIBLE
-        dockScroll.visibility = View.VISIBLE
-        dockRow.getChildAt(0)?.requestFocus()
+        if (!allAppsOpen) return
+        allAppsOpen = false
+        setHomeFocusable(true)
+        dockRow.getChildAt(dockFocus.coerceIn(0, dockRow.childCount - 1))?.requestFocus()
+        allApps.animate().alpha(0f).translationY(SLIDE.toFloat()).setDuration(ANIM_MS)
+            .setInterpolator(AccelerateInterpolator())
+            .withEndAction { if (!allAppsOpen) allApps.visibility = View.GONE }
+            .start()
+        pill.animate().alpha(1f).setDuration(ANIM_MS).start()
+        dockScroll.animate().alpha(1f).setDuration(ANIM_MS).start()
     }
 
-    private fun showAppMenu(app: AppEntry) {
-        val dock = visibleDock().toMutableList()
-        val pinned = app.pkg in dock
-        builder().setTitle(app.label)
-            .setItems(arrayOf(if (pinned) "Remove from dock" else "Add to dock")) { _, _ ->
-                if (pinned) dock.remove(app.pkg) else dock.add(app.pkg)
-                prefs.dock = dock
-                rebuildDock()
-            }.show()
+    // the pill and dock stay in the layout under the all apps screen, so keep focus from reaching them
+    private fun setHomeFocusable(on: Boolean) {
+        pill.descendantFocusability = if (on) ViewGroup.FOCUS_BEFORE_DESCENDANTS else ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        dockScroll.descendantFocusability =
+            if (on) ViewGroup.FOCUS_AFTER_DESCENDANTS else ViewGroup.FOCUS_BLOCK_DESCENDANTS
     }
 
     private fun showCustomize() {
         val options = arrayOf(
-            "Dock apps",
             "Wallpaper",
             "Theme: ${prefs.themeMode.label}",
             "Top bar icons",
@@ -375,12 +408,11 @@ class MainActivity : Activity() {
         )
         builder().setTitle("Customize").setItems(options) { _, which ->
             when (which) {
-                0 -> pickDock()
-                1 -> pickWallpaper()
-                2 -> pickTheme()
-                3 -> pickPill()
-                4 -> { prefs.dock = Prefs.DEFAULT_DOCK; rebuildDock() }
-                5 -> UpdateFlow(this, this::builder).start()
+                0 -> pickWallpaper()
+                1 -> pickTheme()
+                2 -> pickPill()
+                3 -> { prefs.dock = Prefs.DEFAULT_DOCK; rebuildDock() }
+                4 -> UpdateFlow(this, this::builder).start()
             }
         }.show()
     }
@@ -392,20 +424,6 @@ class MainActivity : Activity() {
                 prefs.themeMode = modes[which]
                 d.dismiss()
                 applyTheme()
-            }.show()
-    }
-
-    private fun pickDock() {
-        val on = visibleDock().toMutableList()
-        val checked = BooleanArray(apps.size) { apps[it].pkg in on }
-        builder().setTitle("Dock apps")
-            .setMultiChoiceItems(apps.map { it.label }.toTypedArray(), checked) { _, which, isChecked ->
-                val pkg = apps[which].pkg
-                if (isChecked) on += pkg else on -= pkg
-            }
-            .setPositiveButton("Done") { _, _ ->
-                prefs.dock = on
-                rebuildDock(0)
             }.show()
     }
 
@@ -450,4 +468,12 @@ class MainActivity : Activity() {
 
     private val TILE_W by lazy { dp(168) }
     private val TILE_H by lazy { dp(94) }
+    private val SLIDE by lazy { dp(40) }
+
+    private companion object {
+        // the dock fits this many tiles on one screen
+        const val MAX_DOCK = 5
+        const val COLUMNS = 5
+        const val ANIM_MS = 200L
+    }
 }
