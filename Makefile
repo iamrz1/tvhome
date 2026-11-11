@@ -1,6 +1,7 @@
 JAVA_HOME ?= /Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
 DEVICE ?= 192.168.10.168:5555
-APK := app/build/outputs/apk/release/app-release.apk
+ABI = $(shell adb -s $(DEVICE) shell getprop ro.product.cpu.abi | tr -d '\r')
+APK = app/build/outputs/apk/release/app-$(ABI)-release.apk
 
 export JAVA_HOME
 

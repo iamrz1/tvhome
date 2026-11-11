@@ -342,13 +342,20 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomize() {
-        val options = arrayOf("Dock apps", "Wallpaper", "Top bar icons", "Reset dock")
+        val options = arrayOf(
+            "Dock apps",
+            "Wallpaper",
+            "Top bar icons",
+            "Reset dock",
+            "Check for updates (v${Updater.currentVersion(this)})",
+        )
         AlertDialog.Builder(this).setTitle("Customize").setItems(options) { _, which ->
             when (which) {
                 0 -> pickDock()
                 1 -> pickWallpaper()
                 2 -> pickPill()
                 3 -> { prefs.dock = Prefs.DEFAULT_DOCK; rebuildDock() }
+                4 -> UpdateFlow(this).start()
             }
         }.show()
     }
