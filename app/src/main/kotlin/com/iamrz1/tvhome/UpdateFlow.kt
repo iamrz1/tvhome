@@ -8,7 +8,7 @@ import android.widget.Toast
 import java.io.File
 import kotlin.concurrent.thread
 
-class UpdateFlow(private val activity: Activity) {
+class UpdateFlow(private val activity: Activity, private val builder: () -> AlertDialog.Builder) {
     private val ui = Handler(Looper.getMainLooper())
 
     fun start() {
@@ -26,7 +26,7 @@ class UpdateFlow(private val activity: Activity) {
 
     private fun offer(update: Update) {
         val notes = update.notes.trim().take(500)
-        AlertDialog.Builder(activity)
+        builder()
             .setTitle("Update available")
             .setMessage("${Updater.currentVersion(activity)} -> ${update.version}\n\n$notes")
             .setPositiveButton("Install") { _, _ -> install(update) }
@@ -36,7 +36,7 @@ class UpdateFlow(private val activity: Activity) {
 
     private fun install(update: Update) {
         if (!Updater.canInstall(activity)) {
-            AlertDialog.Builder(activity)
+            builder()
                 .setTitle("Allow installs")
                 .setMessage("Turn on \"Allow from this source\" for TV Home, then check for updates again.")
                 .setPositiveButton("Open settings") { _, _ -> Updater.openInstallSettings(activity) }
@@ -44,7 +44,7 @@ class UpdateFlow(private val activity: Activity) {
                 .show()
             return
         }
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = builder()
             .setTitle("Downloading ${update.version}")
             .setMessage("0%")
             .setCancelable(false)

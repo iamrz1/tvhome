@@ -4,7 +4,7 @@ A small Android TV home launcher. It has a wallpaper gradient, a top bar with a 
 
 ## Customize
 
-Select the sliders icon in the top bar. From there you can choose the dock apps, the wallpaper and the top bar icons, and check for updates. Hold OK on a dock tile to move or remove it.
+Select the sliders icon in the top bar. From there you can choose the dock apps, the wallpaper, the theme (Auto, Dark or Light) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the dialogs. Hold OK on a dock tile to move or remove it.
 
 ## Build
 
