@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import java.io.File
 import kotlin.concurrent.thread
@@ -18,17 +19,16 @@ class UpdateFlow(private val activity: Activity, private val builder: () -> Aler
             ui.post {
                 if (activity.isFinishing) return@post
                 result
-                    .onFailure { toast("Could not check for updates") }
+                    .onFailure { fail("Could not check for updates", it) }
                     .onSuccess { if (it == null) toast("You are on the latest version") else offer(it) }
             }
         }
     }
 
     private fun offer(update: Update) {
-        val notes = update.notes.trim().take(500)
         builder()
             .setTitle("Update available")
-            .setMessage("${Updater.currentVersion(activity)} -> ${update.version}\n\n$notes")
+            .setMessage("${Updater.currentVersion(activity)} -> ${update.version}")
             .setPositiveButton("Install") { _, _ -> install(update) }
             .setNegativeButton("Later", null)
             .show()
@@ -59,10 +59,21 @@ class UpdateFlow(private val activity: Activity, private val builder: () -> Aler
             }
             ui.post {
                 dialog.dismiss()
-                result.onFailure { toast("Update failed: ${it.message}") }
+                result.onFailure { fail("Update failed", it) }
             }
         }
     }
 
-    private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+    // shows the reason too, so a failure can be told apart from the toast alone
+    private fun fail(what: String, error: Throwable) {
+        Log.e(TAG, what, error)
+        toast("$what: ${error.javaClass.simpleName}: ${error.message}", Toast.LENGTH_LONG)
+    }
+
+    private fun toast(text: String, length: Int = Toast.LENGTH_SHORT) =
+        Toast.makeText(activity, text, length).show()
+
+    private companion object {
+        const val TAG = "tvhome"
+    }
 }
