@@ -5,10 +5,13 @@ APK = app/build/outputs/apk/release/app-$(ABI)-release.apk
 
 export JAVA_HOME
 
-.PHONY: build install run clean
+.PHONY: build lint install run clean
 
 build:
 	./gradlew assembleRelease
+
+lint:
+	./gradlew lintRelease
 
 install: build
 	adb -s $(DEVICE) install -r $(APK)
