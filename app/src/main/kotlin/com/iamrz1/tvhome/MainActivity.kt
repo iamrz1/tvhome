@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -34,11 +35,13 @@ import java.util.Collections
 
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
+    private lateinit var palette: Palette
     private lateinit var root: FrameLayout
     private lateinit var pill: LinearLayout
     private lateinit var dockScroll: HorizontalScrollView
     private lateinit var dockRow: LinearLayout
     private lateinit var allApps: View
+    private lateinit var allTitle: TextView
     private lateinit var grid: GridView
 
     private val adapter = AppsAdapter()
@@ -49,6 +52,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        palette = Palette.resolve(prefs.themeMode, resources.configuration)
         root = FrameLayout(this)
         root.background = Wallpapers.get(prefs.wallpaper).drawable()
         setContentView(root)
@@ -70,6 +74,11 @@ class MainActivity : Activity() {
         hideAllApps()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (prefs.themeMode == ThemeMode.AUTO) applyTheme()
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (allAppsVisible()) hideAllApps()
@@ -87,16 +96,29 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
-    private fun round(color: String, radiusDp: Int) = GradientDrawable().apply {
-        setColor(Color.parseColor(color))
+    private fun round(color: Int, radiusDp: Int) = GradientDrawable().apply {
+        setColor(color)
         cornerRadius = dp(radiusDp).toFloat()
+    }
+
+    private fun builder() = AlertDialog.Builder(this, palette.dialogTheme)
+
+    private fun applyTheme() {
+        palette = Palette.resolve(prefs.themeMode, resources.configuration)
+        pill.background = round(palette.pill, 30)
+        dockScroll.background = round(palette.dock, 28)
+        allApps.setBackgroundColor(palette.overlay)
+        allTitle.setTextColor(palette.label)
+        fillPill()
+        rebuildDock()
+        adapter.notifyDataSetChanged()
     }
 
     private fun ring(radiusDp: Int, oval: Boolean = false): Drawable {
         val active = GradientDrawable().apply {
             if (oval) shape = GradientDrawable.OVAL else cornerRadius = dp(radiusDp).toFloat()
-            setColor(Color.parseColor("#22FFFFFF"))
-            setStroke(dp(3), Color.WHITE)
+            setColor(palette.focusFill)
+            setStroke(dp(3), palette.focus)
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), active)
@@ -117,7 +139,7 @@ class MainActivity : Activity() {
         pill = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = round("#99121A21", 30)
+            background = round(palette.pill, 30)
         }
         root.addView(
             pill,
@@ -134,7 +156,7 @@ class MainActivity : Activity() {
             format24Hour = "HH:mm"
             format12Hour = "HH:mm"
             textSize = 22f
-            setTextColor(MUTED)
+            setTextColor(palette.muted)
             setPadding(dp(14), 0, dp(10), 0)
         })
         if (PillItem.WIFI in on) pill.addView(pillButton(R.drawable.ic_wifi, "Wi-Fi") {
@@ -151,14 +173,14 @@ class MainActivity : Activity() {
 
     private fun pillButton(res: Int, desc: String, onClick: () -> Unit) = ImageView(this).apply {
         setImageResource(res)
-        setColorFilter(MUTED)
+        setColorFilter(palette.muted)
         contentDescription = desc
         setPadding(dp(10), dp(10), dp(10), dp(10))
         layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(4); marginEnd = dp(4) }
         isFocusable = true
         foreground = ring(0, oval = true)
         setOnClickListener { onClick() }
-        setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) Color.WHITE else MUTED) }
+        setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) palette.focus else palette.muted) }
     }
 
     private fun open(action: String) {
@@ -174,7 +196,7 @@ class MainActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            background = round("#CC121A21", 28)
+            background = round(palette.dock, 28)
         }
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -200,7 +222,7 @@ class MainActivity : Activity() {
         for (pkg in visibleDock()) byPkg[pkg]?.let { dockRow.addView(dockTile(it)) }
         if (dockRow.childCount == 0) dockRow.addView(TextView(this).apply {
             text = "Press Down for all apps"
-            setTextColor(MUTED)
+            setTextColor(palette.muted)
             textSize = 18f
             setPadding(dp(16), dp(16), dp(16), dp(16))
         })
@@ -210,14 +232,14 @@ class MainActivity : Activity() {
     }
 
     private fun newTile() = FrameLayout(this).apply {
-        background = round("#2A3640", 14)
         clipToOutline = true
         outlineProvider = ViewOutlineProvider.BACKGROUND
-        foreground = ring(14)
     }
 
     private fun bindTile(tile: FrameLayout, app: AppEntry) {
         tile.removeAllViews()
+        tile.background = round(palette.tile, 14)
+        tile.foreground = ring(14)
         val banner = app.info.activityInfo.loadBanner(packageManager)
         if (banner != null) {
             tile.addView(ImageView(this).apply {
@@ -237,7 +259,7 @@ class MainActivity : Activity() {
                 addView(TextView(context).apply {
                     text = app.label
                     textSize = 14f
-                    setTextColor(Color.WHITE)
+                    setTextColor(palette.label)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -261,7 +283,7 @@ class MainActivity : Activity() {
         val dock = visibleDock().toMutableList()
         val i = dock.indexOf(app.pkg)
         val options = arrayOf("Move left", "Move right", "Remove from dock")
-        AlertDialog.Builder(this).setTitle(app.label).setItems(options) { _, which ->
+        builder().setTitle(app.label).setItems(options) { _, which ->
             var focus = i
             when (which) {
                 0 -> if (i > 0) { Collections.swap(dock, i, i - 1); focus = i - 1 }
@@ -296,18 +318,18 @@ class MainActivity : Activity() {
                 }
             }
         }
-        val title = TextView(this).apply {
+        allTitle = TextView(this).apply {
             text = "All apps"
             textSize = 24f
-            setTextColor(Color.WHITE)
+            setTextColor(palette.label)
             setPadding(0, 0, 0, dp(16))
         }
         allApps = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F0101820"))
+            setBackgroundColor(palette.overlay)
             setPadding(dp(32), dp(40), dp(32), dp(24))
             visibility = View.GONE
-            addView(title)
+            addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         }
         root.addView(allApps, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -334,29 +356,49 @@ class MainActivity : Activity() {
     private fun showAppMenu(app: AppEntry) {
         val dock = visibleDock().toMutableList()
         val pinned = app.pkg in dock
-        AlertDialog.Builder(this).setTitle(app.label)
+        builder().setTitle(app.label)
             .setItems(arrayOf(if (pinned) "Remove from dock" else "Add to dock")) { _, _ ->
                 if (pinned) dock.remove(app.pkg) else dock.add(app.pkg)
                 prefs.dock = dock
+                rebuildDock()
             }.show()
     }
 
     private fun showCustomize() {
-        val options = arrayOf("Dock apps", "Wallpaper", "Top bar icons", "Reset dock")
-        AlertDialog.Builder(this).setTitle("Customize").setItems(options) { _, which ->
+        val options = arrayOf(
+            "Dock apps",
+            "Wallpaper",
+            "Theme: ${prefs.themeMode.label}",
+            "Top bar icons",
+            "Reset dock",
+            "Check for updates (v${Updater.currentVersion(this)})",
+        )
+        builder().setTitle("Customize").setItems(options) { _, which ->
             when (which) {
                 0 -> pickDock()
                 1 -> pickWallpaper()
-                2 -> pickPill()
-                3 -> { prefs.dock = Prefs.DEFAULT_DOCK; rebuildDock() }
+                2 -> pickTheme()
+                3 -> pickPill()
+                4 -> { prefs.dock = Prefs.DEFAULT_DOCK; rebuildDock() }
+                5 -> UpdateFlow(this, this::builder).start()
             }
         }.show()
+    }
+
+    private fun pickTheme() {
+        val modes = ThemeMode.entries
+        builder().setTitle("Theme")
+            .setSingleChoiceItems(modes.map { it.label }.toTypedArray(), prefs.themeMode.ordinal) { d, which ->
+                prefs.themeMode = modes[which]
+                d.dismiss()
+                applyTheme()
+            }.show()
     }
 
     private fun pickDock() {
         val on = visibleDock().toMutableList()
         val checked = BooleanArray(apps.size) { apps[it].pkg in on }
-        AlertDialog.Builder(this).setTitle("Dock apps")
+        builder().setTitle("Dock apps")
             .setMultiChoiceItems(apps.map { it.label }.toTypedArray(), checked) { _, which, isChecked ->
                 val pkg = apps[which].pkg
                 if (isChecked) on += pkg else on -= pkg
@@ -369,7 +411,7 @@ class MainActivity : Activity() {
 
     private fun pickWallpaper() {
         val names = Wallpapers.all.map { it.name }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Wallpaper")
+        builder().setTitle("Wallpaper")
             .setSingleChoiceItems(names, prefs.wallpaper) { dialog, which ->
                 prefs.wallpaper = which
                 root.background = Wallpapers.get(which).drawable()
@@ -381,7 +423,7 @@ class MainActivity : Activity() {
         val items = PillItem.entries
         val on = prefs.pill.toMutableSet()
         val checked = BooleanArray(items.size) { items[it] in on }
-        AlertDialog.Builder(this).setTitle("Top bar icons")
+        builder().setTitle("Top bar icons")
             .setMultiChoiceItems(items.map { it.label }.toTypedArray(), checked) { _, which, isChecked ->
                 if (isChecked) on += items[which] else on -= items[which]
             }
@@ -408,8 +450,4 @@ class MainActivity : Activity() {
 
     private val TILE_W by lazy { dp(168) }
     private val TILE_H by lazy { dp(94) }
-
-    private companion object {
-        val MUTED = Color.parseColor("#9AA7B0")
-    }
 }

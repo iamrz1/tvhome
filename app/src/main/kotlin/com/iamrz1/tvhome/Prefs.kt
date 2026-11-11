@@ -16,6 +16,10 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_WALLPAPER, 0)
         set(v) = sp.edit().putInt(KEY_WALLPAPER, v).apply()
 
+    var themeMode: ThemeMode
+        get() = ThemeMode.entries.getOrElse(sp.getInt(KEY_THEME, ThemeMode.DARK.ordinal)) { ThemeMode.DARK }
+        set(v) = sp.edit().putInt(KEY_THEME, v.ordinal).apply()
+
     var dock: List<String>
         get() = sp.getString(KEY_DOCK, null)?.split(',')?.filter { it.isNotEmpty() } ?: DEFAULT_DOCK
         set(v) = sp.edit().putString(KEY_DOCK, v.joinToString(",")).apply()
@@ -30,6 +34,7 @@ class Prefs(context: Context) {
 
     companion object {
         private const val KEY_WALLPAPER = "wallpaper"
+        private const val KEY_THEME = "theme"
         private const val KEY_DOCK = "dock"
         private const val KEY_PILL = "pill"
 
