@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/iamrz1/tvhome/compare/v0.2.0...v0.2.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* check for updates without the GitHub API and show why a failure happened ([#8](https://github.com/iamrz1/tvhome/issues/8)) ([cbe063c](https://github.com/iamrz1/tvhome/commit/cbe063ce04eb081ee8ba39f4a29f6046c0e58663))
+
 ## [0.2.0](https://github.com/iamrz1/tvhome/compare/v0.1.0...v0.2.0) (2026-11-11)
 
 
