@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/iamrz1/tvhome/compare/v0.3.1...v0.3.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* stop the dock row from clipping the highlight at its padding ([#15](https://github.com/iamrz1/tvhome/issues/15)) ([4f2c38c](https://github.com/iamrz1/tvhome/commit/4f2c38ce6df2e9887b372e54516f5d4a8d5ba1da))
+
 ## [0.3.1](https://github.com/iamrz1/tvhome/compare/v0.3.0...v0.3.1) (2026-11-12)
 
 
