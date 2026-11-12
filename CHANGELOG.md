@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/iamrz1/tvhome/compare/v0.3.0...v0.3.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* keep the move highlight inside the dock at both ends ([#13](https://github.com/iamrz1/tvhome/issues/13)) ([d6cb3d6](https://github.com/iamrz1/tvhome/commit/d6cb3d66262f1a61b1d388605826df0add10fe8b))
+
 ## [0.3.0](https://github.com/iamrz1/tvhome/compare/v0.2.1...v0.3.0) (2026-11-12)
 
 
