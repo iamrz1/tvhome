@@ -33,14 +33,25 @@ class PanelHandle(private val dialog: Dialog, private val message: TextView?) {
     fun dismiss() = dialog.dismiss()
 }
 
-/** Panel draws menus like the context menu of the stock Android TV launcher: a light card over an 80% black scrim. */
+private class Colors(background: String, focused: String, text: String, header: String) {
+    val background = Color.parseColor(background)
+    val focused = Color.parseColor(focused)
+    val text = Color.parseColor(text)
+    val header = Color.parseColor(header)
+}
+
+/**
+ * Panel draws menus like the context menu of the stock Android TV launcher: a card over an 80% black scrim. The card
+ * is light, like the stock one, or dark when [dark] is set. The dark colors are the stock dark dialog colors.
+ */
 object Panel {
-    private val BACKGROUND = Color.parseColor("#EEEEEE")
-    private val FOCUSED = Color.parseColor("#CFCFCF")
-    private val TEXT = Color.parseColor("#212121")
-    private val HEADER = Color.parseColor("#757575")
+    private val LIGHT = Colors("#EEEEEE", "#CFCFCF", "#212121", "#757575")
+    private val DARK = Colors("#263238", "#3A464D", "#EEEEEE", "#9AA7B0")
     private const val WIDTH_DP = 280
     private var current: Dialog? = null
+
+    /** dark picks the dark card. The activity sets it from the theme. */
+    var dark = false
 
     fun dismiss() {
         current?.dismiss()
@@ -58,6 +69,7 @@ object Panel {
         val density = activity.resources.displayMetrics.density
         fun px(v: Int) = (v * density + 0.5f).toInt()
         val width = px(WIDTH_DP)
+        val colors = if (dark) DARK else LIGHT
 
         current?.dismiss()
         val dialog = Dialog(activity)
@@ -67,7 +79,7 @@ object Panel {
             orientation = LinearLayout.VERTICAL
             setPadding(0, px(8), 0, px(8))
             background = GradientDrawable().apply {
-                setColor(BACKGROUND)
+                setColor(colors.background)
                 cornerRadius = px(6).toFloat()
             }
             clipToOutline = true
@@ -79,10 +91,10 @@ object Panel {
             setTextColor(color)
             setPadding(px(16), px(top), px(16), px(bottom))
         }
-        title?.let { content.addView(text(it, 12f, HEADER, 4, 8)) }
+        title?.let { content.addView(text(it, 12f, colors.header, 4, 8)) }
         var messageView: TextView? = null
-        message?.let { messageView = text(it, 14f, TEXT, 4, 8).also(content::addView) }
-        val views = rows.map { row -> rowView(activity, row, dialog, density).also(content::addView) }
+        message?.let { messageView = text(it, 14f, colors.text, 4, 8).also(content::addView) }
+        val views = rows.map { row -> rowView(activity, row, dialog, density, colors).also(content::addView) }
 
         dialog.setContentView(content, ViewGroup.LayoutParams(width, WRAP_CONTENT))
         dialog.setCancelable(cancelable)
@@ -137,11 +149,11 @@ object Panel {
         lp.y = if (above >= margin) above else (loc[1] + anchor.height + px(12)).coerceAtMost(screen.heightPixels - height - margin)
     }
 
-    private fun rowView(activity: Activity, row: Row, dialog: Dialog, density: Float): View {
+    private fun rowView(activity: Activity, row: Row, dialog: Dialog, density: Float, colors: Colors): View {
         fun px(v: Int) = (v * density + 0.5f).toInt()
         val check = ImageView(activity).apply {
             setImageResource(R.drawable.ic_check)
-            setColorFilter(TEXT)
+            setColorFilter(colors.text)
             layoutParams = LinearLayout.LayoutParams(px(20), px(20)).apply { marginStart = px(12) }
             visibility = if (row.checked == true) View.VISIBLE else View.GONE
         }
@@ -151,14 +163,14 @@ object Panel {
             setPadding(px(16), 0, px(16), 0)
             isFocusable = true
             background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_focused), ColorDrawable(FOCUSED))
-                addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(FOCUSED))
+                addState(intArrayOf(android.R.attr.state_focused), ColorDrawable(colors.focused))
+                addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(colors.focused))
                 addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
             }
             addView(TextView(activity).apply {
                 text = row.label
                 textSize = 14f
-                setTextColor(TEXT)
+                setTextColor(colors.text)
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             })
             addView(check)
