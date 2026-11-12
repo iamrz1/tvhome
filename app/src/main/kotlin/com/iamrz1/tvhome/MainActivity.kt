@@ -262,13 +262,14 @@ class MainActivity : Activity() {
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(dp(11), dp(8), dp(11), dp(8))
+            // the end padding keeps the scaled highlight of the first and last cell inside the dock
+            setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         dockScroll.addView(dockRow)
         root.addView(
             dockScroll,
             FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM)
-                .apply { setMargins(dp(32), 0, dp(32), dp(32)) },
+                .apply { setMargins(dp(20), 0, dp(20), dp(32)) },
         )
     }
 
