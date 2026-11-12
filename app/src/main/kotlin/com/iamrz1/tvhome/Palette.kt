@@ -13,7 +13,7 @@ enum class ThemeMode(val label: String) {
 class Palette private constructor(val dark: Boolean) {
     val pill = pick("#4D121A21", "#66F2F5F7")
     val dock = pick("#59121A21", "#73F2F5F7")
-    val overlay = pick("#F0101820", "#F2EEF2F5")
+    val overlay = pick("#40121A21", "#4DF2F5F7")
     val tile = pick("#2A3640", "#CFD8DE")
     val label = pick("#FFFFFF", "#101820")
     val muted = pick("#9AA7B0", "#4A5A66")

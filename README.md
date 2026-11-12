@@ -1,6 +1,6 @@
 # tvhome
 
-A small Android TV home launcher. It has a wallpaper gradient, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
+A small Android TV home launcher. It has a wallpaper gradient, which the all apps screen shows too, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
 
 ## Customize
 
