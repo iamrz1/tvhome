@@ -58,6 +58,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         palette = Palette.resolve(prefs.themeMode, resources.configuration)
+        Panel.dark = palette.dark
         root = FrameLayout(this)
         root.background = Wallpapers.get(prefs.wallpaper).drawable()
         setContentView(root)
@@ -131,6 +132,7 @@ class MainActivity : Activity() {
 
     private fun applyTheme() {
         palette = Palette.resolve(prefs.themeMode, resources.configuration)
+        Panel.dark = palette.dark
         pill.background = round(palette.pill, 30)
         dockScroll.background = round(palette.dock, 28)
         allApps.setBackgroundColor(palette.overlay)
@@ -214,8 +216,9 @@ class MainActivity : Activity() {
         if (PillItem.WIFI in on) pill.addView(pillButton(R.drawable.ic_wifi, "Wi-Fi") {
             open(Settings.ACTION_WIFI_SETTINGS)
         })
+        // Android TV settings has no Bluetooth settings screen. Its pairing screen answers CONNECT_INPUT instead.
         if (PillItem.BLUETOOTH in on) pill.addView(pillButton(R.drawable.ic_bluetooth, "Bluetooth") {
-            open(Settings.ACTION_BLUETOOTH_SETTINGS)
+            open(Settings.ACTION_BLUETOOTH_SETTINGS, "com.google.android.intent.action.CONNECT_INPUT")
         })
         if (PillItem.SETTINGS in on) pill.addView(pillButton(R.drawable.ic_settings, "Settings") {
             open(Settings.ACTION_SETTINGS)
@@ -236,12 +239,17 @@ class MainActivity : Activity() {
         setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) palette.focus else palette.muted) }
     }
 
-    private fun open(action: String) {
-        try {
-            startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, "Not available on this device", Toast.LENGTH_SHORT).show()
+    // opens the first action that some app on the device handles
+    private fun open(vararg actions: String) {
+        for (action in actions) {
+            try {
+                startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (e: ActivityNotFoundException) {
+                // try the next one
+            }
         }
+        Toast.makeText(this, "Not available on this device", Toast.LENGTH_SHORT).show()
     }
 
     private fun buildDock() {

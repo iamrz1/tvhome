@@ -1,10 +1,12 @@
 # tvhome
 
-A small Android TV home launcher. It has a wallpaper gradient, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
+A small Android TV home launcher. It has a wallpaper gradient, which the all apps screen shows too, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
 
 ## Customize
 
-Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light), the focus highlight (Line or Glow) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock and the all apps screen. Menus use the light panel of the stock launcher in every theme.
+Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light), the focus highlight (Line or Glow) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the menus. Menus are laid out like the context menu of the stock launcher, light in the light theme and dark in the dark theme.
+
+The Bluetooth button opens the Bluetooth settings where the device has them. Android TV has no such screen, so it opens the pairing screen for accessories instead.
 
 ## Dock
 
