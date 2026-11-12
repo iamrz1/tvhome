@@ -262,6 +262,8 @@ class MainActivity : Activity() {
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
+            // without this the row clips the scaled cells at its padding, which cuts the highlight at both ends
+            clipToPadding = false
             // the end padding keeps the scaled highlight of the first and last cell inside the dock
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
