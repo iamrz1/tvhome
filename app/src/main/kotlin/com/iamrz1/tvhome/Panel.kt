@@ -15,6 +15,7 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 /** Row is one entry of a panel. [checked] shows a check mark, and [keepOpen] keeps the panel open after a click. */
@@ -48,6 +49,10 @@ object Panel {
     private val LIGHT = Colors("#EEEEEE", "#CFCFCF", "#212121", "#757575")
     private val DARK = Colors("#263238", "#3A464D", "#EEEEEE", "#9AA7B0")
     private const val WIDTH_DP = 280
+    private const val ROW_DP = 48
+
+    // what the card keeps free around its list: the title, the padding and the gap to the anchor
+    private const val MARGIN_DP = 170
     private var current: Dialog? = null
 
     /** dark picks the dark card. The activity sets it from the theme. */
@@ -94,7 +99,16 @@ object Panel {
         title?.let { content.addView(text(it, 12f, colors.header, 4, 8)) }
         var messageView: TextView? = null
         message?.let { messageView = text(it, 14f, colors.text, 4, 8).also(content::addView) }
-        val views = rows.map { row -> rowView(activity, row, dialog, density, colors).also(content::addView) }
+        val list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val views = rows.map { row -> rowView(activity, row, dialog, density, colors).also(list::addView) }
+        // a long list scrolls inside the card, so the card never grows taller than the screen
+        val maxList = activity.resources.displayMetrics.heightPixels - px(MARGIN_DP)
+        if (rows.size * px(ROW_DP) > maxList) {
+            content.addView(ScrollView(activity).apply { isVerticalScrollBarEnabled = false; addView(list) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxList))
+        } else {
+            content.addView(list)
+        }
 
         dialog.setContentView(content, ViewGroup.LayoutParams(width, WRAP_CONTENT))
         dialog.setCancelable(cancelable)
@@ -159,7 +173,7 @@ object Panel {
         }
         return LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = px(48)
+            minimumHeight = px(ROW_DP)
             setPadding(px(16), 0, px(16), 0)
             isFocusable = true
             background = StateListDrawable().apply {
