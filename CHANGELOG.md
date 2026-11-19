@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/iamrz1/tvhome/compare/v0.3.2...v0.4.0) (2026-11-19)
+
+
+### Features
+
+* add nine more wallpapers and scroll long menus ([#17](https://github.com/iamrz1/tvhome/issues/17)) ([875bacc](https://github.com/iamrz1/tvhome/commit/875bacc06c461cbf1b8e908a155498a5716187d2))
+
 ## [0.3.2](https://github.com/iamrz1/tvhome/compare/v0.3.1...v0.3.2) (2026-11-12)
 
 
