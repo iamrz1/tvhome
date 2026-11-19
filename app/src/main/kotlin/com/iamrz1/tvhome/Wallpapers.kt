@@ -29,6 +29,15 @@ object Wallpapers {
         Wallpaper("Forest", "#10201A", "#2F6B52"),
         Wallpaper("Plum", "#1E1426", "#5B3A7A"),
         Wallpaper("Graphite", "#0E0F11", "#2B2F36"),
+        Wallpaper("Ocean", "#0B1D2E", "#1F5F8B"),
+        Wallpaper("Sunset", "#2B1530", "#B5533C"),
+        Wallpaper("Aurora", "#0C1F24", "#2E8B7A"),
+        Wallpaper("Midnight", "#0A0F24", "#2C3E8C"),
+        Wallpaper("Rose", "#2A1620", "#9A4A66"),
+        Wallpaper("Slate", "#14181D", "#4B5663"),
+        Wallpaper("Moss", "#14190F", "#5C7A3A"),
+        Wallpaper("Amber", "#241A0C", "#A8741F"),
+        Wallpaper("Crimson", "#1F0C10", "#8A2434"),
     )
 
     fun get(index: Int): Wallpaper = all.getOrElse(index) { all.first() }
