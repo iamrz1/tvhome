@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/iamrz1/tvhome/compare/v0.4.0...v0.5.0) (2026-11-23)
+
+
+### Features
+
+* add light wallpapers, a lift focus style, dock opacity and a full screen settings page ([#19](https://github.com/iamrz1/tvhome/issues/19)) ([43520b4](https://github.com/iamrz1/tvhome/commit/43520b481812629fd586b28e434a889bad17ffc5))
+
 ## [0.4.0](https://github.com/iamrz1/tvhome/compare/v0.3.2...v0.4.0) (2026-11-19)
 
 
