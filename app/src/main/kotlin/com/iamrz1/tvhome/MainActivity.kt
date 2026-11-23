@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -44,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var allApps: View
     private lateinit var allTitle: TextView
     private lateinit var grid: GridView
+    private lateinit var settings: SettingsScreen
 
     private val adapter = AppsAdapter()
     private val icons = HashMap<String, Drawable>()
@@ -57,7 +61,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
-        palette = Palette.resolve(prefs.themeMode, resources.configuration)
+        palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
         root = FrameLayout(this)
         root.background = Wallpapers.get(prefs.wallpaper).drawable()
@@ -65,6 +69,8 @@ class MainActivity : Activity() {
         buildPill()
         buildDock()
         buildAllApps()
+        settings = SettingsScreen(this, prefs, host)
+        root.addView(settings.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
     override fun onResume() {
@@ -84,6 +90,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Panel.dismiss()
+        if (settings.isOpen) closeSettings()
         hideAllApps()
     }
 
@@ -94,6 +101,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (settings.back()) return
         if (movingPkg != null) endMove() else if (allAppsOpen) hideAllApps()
     }
 
@@ -131,24 +139,38 @@ class MainActivity : Activity() {
     private fun withAlpha(color: Int, alpha: Int) = (color and 0x00FFFFFF) or (alpha shl 24)
 
     private fun applyTheme() {
-        palette = Palette.resolve(prefs.themeMode, resources.configuration)
+        palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
         pill.background = round(palette.pill, 30)
-        dockScroll.background = round(palette.dock, 28)
+        dockScroll.background = dockBackground()
         allApps.setBackgroundColor(palette.overlay)
         allTitle.setTextColor(palette.label)
         fillPill()
         rebuildDock()
-        adapter.notifyDataSetChanged()
+        // new cells, because the grid rows are taller when the focus style shows names
+        grid.adapter = adapter
     }
 
     private fun glowStyle() = prefs.focusStyle == FocusStyle.GLOW
+
+    private fun liftStyle() = prefs.focusStyle == FocusStyle.LIFT
+
+    private fun focusScale() = if (liftStyle()) LIFT_SCALE else FOCUS_SCALE
+
+    // the dock card has a thin edge, so it still reads as a card when it is clear
+    private fun dockBackground() = GradientDrawable().apply {
+        setColor(palette.dock)
+        cornerRadius = dp(28).toFloat()
+        setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
+    }
 
     // what a focused top bar button shows: a ring, or a soft radial glow
     private fun pillMark(): Drawable {
         val active = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            if (glowStyle()) {
+            if (liftStyle()) {
+                setColor(withAlpha(palette.focus, 0x33))
+            } else if (glowStyle()) {
                 gradientType = GradientDrawable.RADIAL_GRADIENT
                 gradientRadius = dp(23).toFloat()
                 colors = intArrayOf(withAlpha(Color.WHITE, 0x59), withAlpha(Color.WHITE, 0x00))
@@ -166,7 +188,9 @@ class MainActivity : Activity() {
     // What a dock or grid cell draws behind its tile while the tile is focused (activated) or selected. Both styles
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
     private fun cellBackground(): Drawable {
-        val mark: Drawable = if (glowStyle()) {
+        val mark: Drawable = if (liftStyle()) {
+            GlowDrawable(withAlpha(Color.BLACK, 0x80), dp(14).toFloat(), dp(8).toFloat(), TILE_W, TILE_H, dp(3).toFloat())
+        } else if (glowStyle()) {
             GlowDrawable(withAlpha(Color.WHITE, 0xC0), dp(14).toFloat(), dp(10).toFloat(), TILE_W, TILE_H)
         } else {
             ringFrame(palette.focus, 3)
@@ -181,7 +205,7 @@ class MainActivity : Activity() {
     private fun ringFrame(color: Int, strokeDp: Int) =
         RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), dp(14).toFloat(), TILE_W, TILE_H)
 
-    private fun scaleTo(v: View, active: Boolean, factor: Float = FOCUS_SCALE) {
+    private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
         v.animate().scaleX(s).scaleY(s).setDuration(120).start()
     }
@@ -257,7 +281,7 @@ class MainActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            background = round(palette.dock, 28)
+            background = dockBackground()
         }
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -297,7 +321,7 @@ class MainActivity : Activity() {
             textSize = 18f
             setPadding(dp(16), dp(16), dp(16), dp(16))
         })
-        if (!allAppsOpen) {
+        if (!allAppsOpen && !settings.isOpen) {
             dockRow.getChildAt(focusIndex.coerceIn(0, dockRow.childCount - 1))?.requestFocus()
         }
     }
@@ -356,7 +380,7 @@ class MainActivity : Activity() {
             setOnLongClickListener { showAppMenu(app, it); true }
             setOnFocusChangeListener { _, f ->
                 cell.isActivated = f
-                scaleTo(cell, f, if (app.pkg == movingPkg) MOVE_SCALE else FOCUS_SCALE)
+                scaleTo(cell, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale())
             }
         }
         cell.addView(tile, FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
@@ -443,12 +467,12 @@ class MainActivity : Activity() {
             setOnItemLongClickListener { _, view, pos, _ -> showAppMenu(apps[pos], view); true }
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
-                    selectedCell?.let { scaleTo(it, false) }
-                    selectedCell = v?.also { scaleTo(it, true) }
+                    selectedCell?.let { scaleTo(it, false); showName(it, false) }
+                    selectedCell = v?.also { scaleTo(it, true); showName(it, true) }
                 }
 
                 override fun onNothingSelected(p: AdapterView<*>) {
-                    selectedCell?.let { scaleTo(it, false) }
+                    selectedCell?.let { scaleTo(it, false); showName(it, false) }
                     selectedCell = null
                 }
             }
@@ -507,62 +531,39 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomize() {
-        val rows = listOf(
-            Row("Wallpaper") { pickWallpaper() },
-            Row("Theme: ${prefs.themeMode.label}") { pickTheme() },
-            Row("Focus highlight: ${prefs.focusStyle.label}") { pickFocusStyle() },
-            Row("Top bar icons") { pickPill() },
-            Row("Reset dock") {
-                prefs.dock = Prefs.DEFAULT_DOCK
-                rebuildDock()
-            },
-            Row("Check for updates (v${Updater.currentVersion(this)})") { UpdateFlow(this, customizeButton).start() },
-        )
-        Panel.show(this, "Customize", null, rows, customizeButton)
+        Panel.dismiss()
+        setHomeFocusable(false)
+        settings.show()
     }
 
-    private fun pickWallpaper() {
-        val rows = Wallpapers.all.mapIndexed { i, wallpaper ->
-            Row(wallpaper.name, checked = i == prefs.wallpaper) {
-                prefs.wallpaper = i
-                root.background = Wallpapers.get(i).drawable()
-            }
-        }
-        Panel.show(this, "Wallpaper", null, rows, customizeButton)
+    private fun closeSettings() {
+        settings.back()
+        while (settings.isOpen) settings.back()
     }
 
-    private fun pickTheme() {
-        val rows = ThemeMode.entries.map { mode ->
-            Row(mode.label, checked = mode == prefs.themeMode) {
-                prefs.themeMode = mode
-                applyTheme()
-            }
-        }
-        Panel.show(this, "Theme", null, rows, customizeButton)
-    }
+    private val host = object : SettingsHost {
+        override val palette get() = this@MainActivity.palette
 
-    private fun pickFocusStyle() {
-        val rows = FocusStyle.entries.map { style ->
-            Row(style.label, checked = style == prefs.focusStyle) {
-                prefs.focusStyle = style
-                applyTheme()
-            }
+        override fun apply() {
+            root.background = Wallpapers.get(prefs.wallpaper).drawable()
+            applyTheme()
         }
-        Panel.show(this, "Focus highlight", null, rows, customizeButton)
-    }
 
-    // each row applies at once, and Back closes the panel
-    private fun pickPill() {
-        val on = prefs.pill.toMutableSet()
-        val rows = PillItem.entries.map { item ->
-            Row(item.label, checked = item in on, keepOpen = true) { row ->
-                if (item in on) on -= item else on += item
-                row.checked = item in on
-                prefs.pill = on
-                fillPill()
-            }
+        override fun snapshot(): Bitmap {
+            val scale = 0.5f
+            val bitmap = Bitmap.createBitmap((root.width * scale).toInt(), (root.height * scale).toInt(), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.scale(scale, scale)
+            root.draw(canvas)
+            return bitmap
         }
-        Panel.show(this, "Top bar icons", null, rows, customizeButton, onDismiss = { customizeButton?.requestFocus() })
+
+        override fun closed() {
+            setHomeFocusable(true)
+            customizeButton?.requestFocus()
+        }
+
+        override fun checkUpdates(anchor: View) = UpdateFlow(this@MainActivity, anchor).start()
     }
 
     private inner class AppsAdapter : BaseAdapter() {
@@ -572,14 +573,33 @@ class MainActivity : Activity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val cell = (convertView as? FrameLayout) ?: FrameLayout(this@MainActivity).apply {
-                layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM)
                 clipChildren = false
                 addView(newTile(), FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
+                // the name under a selected tile, for the focus styles that show it
+                addView(TextView(context).apply {
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    letterSpacing = 0.05f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    visibility = View.INVISIBLE
+                }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) })
             }
+            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM + if (liftStyle()) dp(32) else 0)
             cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
+            (cell.getChildAt(1) as TextView).apply {
+                text = apps[position].label
+                setTextColor(palette.label)
+                visibility = if (liftStyle() && cell.isSelected) View.VISIBLE else View.INVISIBLE
+            }
             return cell
         }
+    }
+
+    private fun showName(cell: View, on: Boolean) {
+        (cell as? FrameLayout)?.getChildAt(1)?.visibility = if (on && liftStyle()) View.VISIBLE else View.INVISIBLE
     }
 
     // five tiles and four gaps fit the dock, and ROOM around a tile is what the highlight can use
@@ -595,6 +615,7 @@ class MainActivity : Activity() {
         const val COLUMNS = 5
         const val ANIM_MS = 200L
         const val FOCUS_SCALE = 1.06f
-        const val MOVE_SCALE = 1.12f
+        const val LIFT_SCALE = 1.15f
+        const val MOVE_SCALE = 1.15f
     }
 }
