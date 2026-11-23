@@ -7,6 +7,7 @@ enum class PillItem(val label: String) {
     WEATHER("Weather"),
     WIFI("Wi-Fi"),
     BLUETOOTH("Bluetooth"),
+    HDMI("HDMI"),
 }
 
 enum class FocusStyle(val label: String) {
@@ -71,7 +72,8 @@ class Prefs(context: Context) {
             ?.split(',')
             ?.mapNotNull { n -> PillItem.entries.firstOrNull { it.name == n } }
             ?.toSet()
-            ?: PillItem.entries.toSet()
+            // HDMI is a shortcut for one projector, so it starts off
+            ?: (PillItem.entries.toSet() - PillItem.HDMI)
         set(v) = sp.edit().putString(KEY_PILL, v.joinToString(",") { it.name }).apply()
 
     companion object {

@@ -37,7 +37,13 @@ interface SettingsHost {
 
     fun checkUpdates(anchor: View)
 
+    val hasProjectorSettings: Boolean
+
+    val hasHdmi: Boolean
+
     fun openSystemSettings()
+
+    fun openProjectorSettings()
 
     fun searchLocation(anchor: View)
 }
@@ -59,6 +65,7 @@ private enum class Page(val label: String, val icon: Int) {
     DOCK("Dock", R.drawable.ic_dock),
     TOP_BAR("Top bar", R.drawable.ic_tune),
     SYSTEM("System", R.drawable.ic_settings),
+    PROJECTOR("Projector", R.drawable.ic_projector),
     UPDATES("Updates", R.drawable.ic_update),
 }
 
@@ -189,12 +196,14 @@ class SettingsScreen(
         }, delay)
     }
 
-    private fun topOptions() = Page.entries.map { p ->
+    private fun topOptions() = Page.entries.filter { it != Page.PROJECTOR || host.hasProjectorSettings }.map { p ->
         Option(p.label, icon = p.icon) { v ->
             if (p == Page.UPDATES) {
                 host.checkUpdates(v)
             } else if (p == Page.SYSTEM) {
                 host.openSystemSettings()
+            } else if (p == Page.PROJECTOR) {
+                host.openProjectorSettings()
             } else {
                 page = p
                 focusSection = 0
@@ -244,7 +253,7 @@ class SettingsScreen(
             })),
         )
         Page.TOP_BAR -> listOf(
-            Section("Show in the top bar", PillItem.entries.map { item ->
+            Section("Show in the top bar", PillItem.entries.filter { it != PillItem.HDMI || host.hasHdmi }.map { item ->
                 Option(item.label, checked = item in prefs.pill) {
                     val on = prefs.pill.toMutableSet()
                     if (item in on) on -= item else on += item
@@ -260,7 +269,7 @@ class SettingsScreen(
                 },
             )),
         )
-        Page.SYSTEM, Page.UPDATES -> emptyList()
+        Page.SYSTEM, Page.PROJECTOR, Page.UPDATES -> emptyList()
     }
 
     private fun render() {

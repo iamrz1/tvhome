@@ -266,6 +266,9 @@ class MainActivity : Activity() {
         if (PillItem.BLUETOOTH in on) pill.addView(pillButton(R.drawable.ic_bluetooth, "Bluetooth") {
             open(Settings.ACTION_BLUETOOTH_SETTINGS, "com.google.android.intent.action.CONNECT_INPUT")
         })
+        if (PillItem.HDMI in on && Projector.hasHdmi(this)) pill.addView(pillButton(R.drawable.ic_hdmi, "HDMI") {
+            Projector.openHdmi(this)
+        })
         customizeButton = pillButton(R.drawable.ic_tune, "Customize") { showCustomize() }
         pill.addView(customizeButton)
     }
@@ -652,7 +655,17 @@ class MainActivity : Activity() {
 
         override fun checkUpdates(anchor: View) = UpdateFlow(this@MainActivity, anchor).start()
 
+        override val hasProjectorSettings get() = Projector.hasSettings(this@MainActivity)
+
+        override val hasHdmi get() = Projector.hasHdmi(this@MainActivity)
+
         override fun openSystemSettings() = open(Settings.ACTION_SETTINGS)
+
+        override fun openProjectorSettings() {
+            // so that Home shows the home screen again, not this screen
+            closeSettings()
+            Projector.openSettings(this@MainActivity)
+        }
 
         override fun searchLocation(anchor: View) {
             LocationSearch(this@MainActivity, palette, anchor) { place ->

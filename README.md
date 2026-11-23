@@ -9,8 +9,9 @@ Select the sliders icon in the top bar. The settings screen shows a picture of t
 - **Wallpaper**: light and dark gradients.
 - **Look**: the theme (Auto, Dark or Light) and the focus highlight (Line, Glow or Lift). The theme only changes the layers over the wallpaper. Lift scales the tile up with a shadow, and all apps shows the app name under it.
 - **Dock**: how opaque the dock is, and a reset of its apps.
-- **Top bar**: which icons to show, and the weather. Search for a place by name, because that needs no location permission. The weather comes from Open-Meteo and refreshes every 30 minutes.
+- **Top bar**: which icons to show (HDMI starts off, and only shows on the projector), and the weather. Search for a place by name, because that needs no location permission. The weather comes from Open-Meteo and refreshes every 30 minutes.
 - **System**: opens the Android settings.
+- **Projector**: the settings of the A6 Pro projector (HTC LuminaOS). It only shows on a device that has them. It needs the permission to display over other apps, which you can give with `adb shell appops set com.iamrz1.tvhome SYSTEM_ALERT_WINDOW allow`.
 - **Updates**: checks for a new version.
 
 New installs start with the Light theme, the Lift highlight and the Sky wallpaper. A choice you already made is kept.
