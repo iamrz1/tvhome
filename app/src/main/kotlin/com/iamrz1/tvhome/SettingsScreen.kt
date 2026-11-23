@@ -36,6 +36,10 @@ interface SettingsHost {
     fun closed()
 
     fun checkUpdates(anchor: View)
+
+    fun openSystemSettings()
+
+    fun searchLocation(anchor: View)
 }
 
 private class Option(
@@ -54,6 +58,7 @@ private enum class Page(val label: String, val icon: Int) {
     LOOK("Look", R.drawable.ic_theme),
     DOCK("Dock", R.drawable.ic_dock),
     TOP_BAR("Top bar", R.drawable.ic_tune),
+    SYSTEM("System", R.drawable.ic_settings),
     UPDATES("Updates", R.drawable.ic_update),
 }
 
@@ -158,6 +163,12 @@ class SettingsScreen(
         }
     }
 
+    /** refresh redraws the page after something outside the screen changed a setting. */
+    fun refresh() {
+        render()
+        refreshPreview(150)
+    }
+
     private fun changed() {
         host.apply()
         render()
@@ -182,6 +193,8 @@ class SettingsScreen(
         Option(p.label, icon = p.icon) { v ->
             if (p == Page.UPDATES) {
                 host.checkUpdates(v)
+            } else if (p == Page.SYSTEM) {
+                host.openSystemSettings()
             } else {
                 page = p
                 focusSection = 0
@@ -239,8 +252,15 @@ class SettingsScreen(
                     changed()
                 }
             }),
+            Section("Weather", listOf(
+                Option("Place\n${prefs.weatherPlace?.name ?: "Not set"}", icon = R.drawable.ic_w_sun) { v -> host.searchLocation(v) },
+                Option(if (prefs.fahrenheit) "Fahrenheit" else "Celsius", icon = R.drawable.ic_theme) {
+                    prefs.fahrenheit = !prefs.fahrenheit
+                    changed()
+                },
+            )),
         )
-        Page.UPDATES -> emptyList()
+        Page.SYSTEM, Page.UPDATES -> emptyList()
     }
 
     private fun render() {
@@ -263,7 +283,12 @@ class SettingsScreen(
                     setPadding(dp(4), dp(10), 0, dp(2))
                 })
             }
-            val row = LinearLayout(activity).apply { setPadding(dp(4), dp(8), dp(4), dp(8)) }
+            // a focused tile is scaled up, so the row must not clip it at its padding
+            val row = LinearLayout(activity).apply {
+                clipChildren = false
+                clipToPadding = false
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+            }
             val wanted = if (s == focusSection) focusIndex else -2
             section.options.forEachIndexed { i, option ->
                 val tile = optionView(option, p)

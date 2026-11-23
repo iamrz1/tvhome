@@ -3,6 +3,9 @@ package com.iamrz1.tvhome
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -15,6 +18,7 @@ import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
+import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -36,6 +40,8 @@ import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
 import java.util.Collections
+import kotlin.concurrent.thread
+import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
@@ -48,6 +54,16 @@ class MainActivity : Activity() {
     private lateinit var allTitle: TextView
     private lateinit var grid: GridView
     private lateinit var settings: SettingsScreen
+    private var weatherBox: LinearLayout? = null
+    private var weatherIcon: ImageView? = null
+    private var weatherTemp: TextView? = null
+    private val ui = Handler(Looper.getMainLooper())
+    private val weatherTick = object : Runnable {
+        override fun run() {
+            refreshWeather()
+            ui.postDelayed(this, WEATHER_MS)
+        }
+    }
 
     private val adapter = AppsAdapter()
     private val icons = HashMap<String, Drawable>()
@@ -79,10 +95,13 @@ class MainActivity : Activity() {
         icons.clear()
         adapter.notifyDataSetChanged()
         rebuildDock()
+        ui.removeCallbacks(weatherTick)
+        weatherTick.run()
     }
 
     override fun onPause() {
         super.onPause()
+        ui.removeCallbacks(weatherTick)
         endMove()
     }
 
@@ -237,6 +256,9 @@ class MainActivity : Activity() {
             setTextColor(palette.muted)
             setPadding(dp(14), 0, dp(10), 0)
         })
+        weatherBox = null
+        if (PillItem.WEATHER in on && prefs.weatherPlace != null) pill.addView(buildWeather())
+        updateWeather()
         if (PillItem.WIFI in on) pill.addView(pillButton(R.drawable.ic_wifi, "Wi-Fi") {
             open(Settings.ACTION_WIFI_SETTINGS)
         })
@@ -244,11 +266,60 @@ class MainActivity : Activity() {
         if (PillItem.BLUETOOTH in on) pill.addView(pillButton(R.drawable.ic_bluetooth, "Bluetooth") {
             open(Settings.ACTION_BLUETOOTH_SETTINGS, "com.google.android.intent.action.CONNECT_INPUT")
         })
-        if (PillItem.SETTINGS in on) pill.addView(pillButton(R.drawable.ic_settings, "Settings") {
-            open(Settings.ACTION_SETTINGS)
-        })
         customizeButton = pillButton(R.drawable.ic_tune, "Customize") { showCustomize() }
         pill.addView(customizeButton)
+    }
+
+    private fun buildWeather(): View {
+        val icon = ImageView(this).apply { setColorFilter(palette.muted) }
+        val temp = TextView(this).apply {
+            textSize = 20f
+            setTextColor(palette.muted)
+            setPadding(dp(6), 0, 0, 0)
+        }
+        weatherIcon = icon
+        weatherTemp = temp
+        return LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(10), 0)
+            visibility = View.GONE
+            addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)))
+            addView(temp)
+            weatherBox = this
+        }
+    }
+
+    // shows the saved weather in place, so a refresh never rebuilds the pill and drops its focus
+    private fun updateWeather() {
+        val box = weatherBox ?: return
+        val place = prefs.weatherPlace
+        val forecast = prefs.forecast?.takeIf { it.place == place?.key }
+        if (place == null || forecast == null) {
+            box.visibility = View.GONE
+            return
+        }
+        val degrees = if (prefs.fahrenheit) forecast.celsius * 9 / 5 + 32 else forecast.celsius
+        weatherIcon?.setImageResource(Weather.icon(forecast.code))
+        weatherTemp?.text = "${degrees.roundToInt()}°"
+        box.contentDescription = place.name
+        box.visibility = View.VISIBLE
+    }
+
+    private fun refreshWeather() {
+        val place = prefs.weatherPlace ?: return
+        if (PillItem.WEATHER !in prefs.pill) return
+        val saved = prefs.forecast
+        if (saved != null && saved.place == place.key && System.currentTimeMillis() - saved.at < WEATHER_MS) return
+        thread {
+            val forecast = runCatching { Weather.current(place) }
+                .onFailure { Log.e("tvhome", "weather failed", it) }
+                .getOrNull() ?: return@thread
+            runOnUiThread {
+                if (isFinishing || prefs.weatherPlace?.key != place.key) return@runOnUiThread
+                prefs.forecast = forecast
+                updateWeather()
+            }
+        }
     }
 
     private fun pillButton(res: Int, desc: String, onClick: () -> Unit) = ImageView(this).apply {
@@ -414,7 +485,20 @@ class MainActivity : Activity() {
                 }
             }
         }
+        rows += Row("App info") { showAppInfo(app) }
         Panel.show(this, null, null, rows, anchor)
+    }
+
+    // the system screen of the app, where it can be uninstalled or have its cache cleared
+    private fun showAppInfo(app: AppEntry) {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", app.pkg, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, "Not available on this device", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // in move mode the selected app follows Left and Right, and Back (or OK) ends it
@@ -485,6 +569,8 @@ class MainActivity : Activity() {
         }
         allApps = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            // a selected cell is scaled up, so the grid must be free to draw outside its own bounds
+            clipChildren = false
             setBackgroundColor(palette.overlay)
             setPadding(dp(32), dp(40), dp(32), dp(24))
             visibility = View.GONE
@@ -547,6 +633,7 @@ class MainActivity : Activity() {
         override fun apply() {
             root.background = Wallpapers.get(prefs.wallpaper).drawable()
             applyTheme()
+            refreshWeather()
         }
 
         override fun snapshot(): Bitmap {
@@ -564,6 +651,19 @@ class MainActivity : Activity() {
         }
 
         override fun checkUpdates(anchor: View) = UpdateFlow(this@MainActivity, anchor).start()
+
+        override fun openSystemSettings() = open(Settings.ACTION_SETTINGS)
+
+        override fun searchLocation(anchor: View) {
+            LocationSearch(this@MainActivity, palette, anchor) { place ->
+                prefs.weatherPlace = place
+                prefs.forecast = null
+                // a place with no weather shown would look like nothing happened
+                if (PillItem.WEATHER !in prefs.pill) prefs.pill = prefs.pill + PillItem.WEATHER
+                apply()
+                settings.refresh()
+            }.show()
+        }
     }
 
     private inner class AppsAdapter : BaseAdapter() {
@@ -614,6 +714,7 @@ class MainActivity : Activity() {
         const val MAX_DOCK = 5
         const val COLUMNS = 5
         const val ANIM_MS = 200L
+        const val WEATHER_MS = 30 * 60 * 1000L
         const val FOCUS_SCALE = 1.06f
         const val LIFT_SCALE = 1.15f
         const val MOVE_SCALE = 1.15f
