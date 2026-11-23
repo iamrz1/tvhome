@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/iamrz1/tvhome/compare/v0.5.0...v0.6.0) (2026-11-23)
+
+
+### Features
+
+* add weather, app info and projector shortcuts, with new defaults and clipping fixes ([#21](https://github.com/iamrz1/tvhome/issues/21)) ([9328f96](https://github.com/iamrz1/tvhome/commit/9328f96cfe145c930f0baf38b9086f072b74158e))
+
 ## [0.5.0](https://github.com/iamrz1/tvhome/compare/v0.4.0...v0.5.0) (2026-11-23)
 
 
