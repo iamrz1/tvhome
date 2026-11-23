@@ -12,6 +12,7 @@ enum class PillItem(val label: String) {
 enum class FocusStyle(val label: String) {
     LINE("Line"),
     GLOW("Glow"),
+    LIFT("Lift"),
 }
 
 class Prefs(context: Context) {
@@ -28,6 +29,11 @@ class Prefs(context: Context) {
     var focusStyle: FocusStyle
         get() = FocusStyle.entries.getOrElse(sp.getInt(KEY_FOCUS, FocusStyle.LINE.ordinal)) { FocusStyle.LINE }
         set(v) = sp.edit().putInt(KEY_FOCUS, v.ordinal).apply()
+
+    /** How opaque the dock card is, from 0 to 100 percent. */
+    var dockOpacity: Int
+        get() = sp.getInt(KEY_DOCK_OPACITY, DEFAULT_DOCK_OPACITY).coerceIn(0, 100)
+        set(v) = sp.edit().putInt(KEY_DOCK_OPACITY, v).apply()
 
     var dock: List<String>
         get() = sp.getString(KEY_DOCK, null)?.split(',')?.filter { it.isNotEmpty() } ?: DEFAULT_DOCK
@@ -46,7 +52,10 @@ class Prefs(context: Context) {
         private const val KEY_THEME = "theme"
         private const val KEY_FOCUS = "focus"
         private const val KEY_DOCK = "dock"
+        private const val KEY_DOCK_OPACITY = "dock_opacity"
         private const val KEY_PILL = "pill"
+
+        const val DEFAULT_DOCK_OPACITY = 40
 
         val DEFAULT_DOCK = listOf(
             "com.netflix.ninja",

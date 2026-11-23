@@ -12,7 +12,8 @@ import android.graphics.drawable.Drawable
 
 /**
  * GlowDrawable draws a soft halo around a rounded rect of [tileW] by [tileH] pixels, centered in its bounds.
- * The halo is a blurred copy of the rect, so it fades out smoothly over [blur] pixels.
+ * The halo is a blurred copy of the rect, so it fades out smoothly over [blur] pixels. It sits [offsetY] pixels lower
+ * than the rect, which makes it a drop shadow.
  */
 class GlowDrawable(
     private val color: Int,
@@ -20,6 +21,7 @@ class GlowDrawable(
     private val blur: Float,
     private val tileW: Int,
     private val tileH: Int,
+    private val offsetY: Float = 0f,
 ) : Drawable() {
     private var bitmap: Bitmap? = null
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
@@ -43,7 +45,7 @@ class GlowDrawable(
             maskFilter = BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL)
         }
         val left = (w - tileW) / 2f
-        val top = (h - tileH) / 2f
+        val top = (h - tileH) / 2f + offsetY
         Canvas(bmp).drawRoundRect(RectF(left, top, left + tileW, top + tileH), radius, radius, glow)
         return bmp
     }
