@@ -57,5 +57,8 @@ object Wallpapers {
         Wallpaper("Mint", true, 65, "#C8F0DC", "#E8F7C8", "#BFE3F5"),
     )
 
+    /** What a fresh install starts with. */
+    val DEFAULT get() = all.indexOfFirst { it.name == "Sky" }
+
     fun get(index: Int): Wallpaper = all.getOrElse(index) { all.first() }
 }

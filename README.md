@@ -1,16 +1,26 @@
 # tvhome
 
-A small Android TV home launcher. It has a wallpaper gradient, which the all apps screen shows too, a top bar with a clock and Wi-Fi, Bluetooth and settings shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
+A small Android TV home launcher. It has a wallpaper gradient, which the all apps screen shows too, a top bar with a clock, the weather and Wi-Fi and Bluetooth shortcuts, a dock of pinned apps and an all apps grid. Press Down on the dock to open the grid. Press Up on the first row, Back or Home to return.
 
-## Customize
+## Settings
 
-Select the sliders icon in the top bar. From there you can choose the wallpaper, the theme (Auto, Dark or Light), the focus highlight (Line or Glow) and the top bar icons, and check for updates. The theme only changes the layers over the wallpaper: the top bar, the dock, the all apps screen and the menus. Menus are laid out like the context menu of the stock launcher, light in the light theme and dark in the dark theme.
+Select the sliders icon in the top bar. The settings screen shows a picture of the home screen, which follows every change, and these categories:
+
+- **Wallpaper**: light and dark gradients.
+- **Look**: the theme (Auto, Dark or Light) and the focus highlight (Line, Glow or Lift). The theme only changes the layers over the wallpaper. Lift scales the tile up with a shadow, and all apps shows the app name under it.
+- **Dock**: how opaque the dock is, and a reset of its apps.
+- **Top bar**: which icons to show (HDMI starts off, and only shows on the projector), and the weather. Search for a place by name, because that needs no location permission. The weather comes from Open-Meteo and refreshes every 30 minutes.
+- **System**: opens the Android settings.
+- **Projector**: the settings of the A6 Pro projector (HTC LuminaOS). It only shows on a device that has them. It needs the permission to display over other apps, which you can give with `adb shell appops set com.iamrz1.tvhome SYSTEM_ALERT_WINDOW allow`.
+- **Updates**: checks for a new version.
+
+New installs start with the Light theme, the Lift highlight and the Sky wallpaper. A choice you already made is kept.
 
 The Bluetooth button opens the Bluetooth settings where the device has them. Android TV has no such screen, so it opens the pairing screen for accessories instead.
 
 ## Dock
 
-Hold OK on an app, in the dock or in all apps, to open its menu. A dock app has Move and Remove from dock. Any other app has Add to dock. The dock holds 5 apps, and adding a sixth shows "Dock is full right now".
+Hold OK on an app, in the dock or in all apps, to open its menu. A dock app has Move and Remove from dock. Any other app has Add to dock. Every app has App info, which opens the system screen of the app, where it can be uninstalled or have its cache cleared. The dock holds 5 apps, and adding a sixth shows "Dock is full right now".
 
 Move selects the app. Press Left or Right to move it along the dock, then Back (or OK) to finish. Home on the home screen does nothing.
 
