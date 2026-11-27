@@ -341,27 +341,19 @@ class MainActivity : Activity() {
         anim.start()
     }
 
-    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring. Nothing
-    // is drawn over the artwork of a tile on any style, because a light layer washes it out.
+    // What a tile draws over its artwork: on glass, a white ring while it is lifted, and nothing otherwise. A thin light
+    // line round every tile looked rough, since it sat on the smoothed edge of the artwork and made a second edge.
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
         tile ?: return
-        if (!glass()) {
+        if (!glass() || !on || !liftStyle()) {
             tile.foreground = null
             return
         }
         val radius = if (tile.tag == ROUND) (if (Corners.square) 0f else height / 2f) else tileRadius(height)
-        val layers = ArrayList<Drawable>()
-        layers += GradientDrawable().apply {
-            setStroke(dp(1), withAlpha(Color.WHITE, 0x66))
+        tile.foreground = GradientDrawable().apply {
+            setStroke(dp(2), withAlpha(Color.WHITE, 0xDB))
             cornerRadius = radius
         }
-        if (on && liftStyle()) {
-            layers += GradientDrawable().apply {
-                setStroke(dp(2), withAlpha(Color.WHITE, 0xDB))
-                cornerRadius = radius
-            }
-        }
-        tile.foreground = LayerDrawable(layers.toTypedArray())
     }
 
     private fun icon(app: AppEntry): Drawable =
@@ -553,10 +545,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun newTile() = FrameLayout(this).apply {
-        clipToOutline = true
-        outlineProvider = ViewOutlineProvider.BACKGROUND
-    }
+    // The tile does not clip to its outline. That clip has no smooth edge, and it cut the rounded corners of the banner and
+    // of the edge line into steps. The banner draws its own rounded corners, and so does the background.
+    private fun newTile() = FrameLayout(this)
 
     // The colors of a tile that has no banner: a gradient of the hue of the icon, pale on the light theme and deep on the
     // dark one.
