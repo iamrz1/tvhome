@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/iamrz1/tvhome/compare/v0.8.1...v0.9.0) (2026-11-27)
+
+
+### Features
+
+* make glass follow the theme and give the top bar and settings the same motion ([#29](https://github.com/iamrz1/tvhome/issues/29)) ([723c918](https://github.com/iamrz1/tvhome/commit/723c9183e8b96365856ff32aba281bf683dc1c85))
+
 ## [0.8.1](https://github.com/iamrz1/tvhome/compare/v0.8.0...v0.8.1) (2026-11-27)
 
 
