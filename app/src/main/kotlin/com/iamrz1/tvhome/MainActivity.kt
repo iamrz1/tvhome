@@ -904,6 +904,15 @@ class MainActivity : Activity() {
         dockScroll.animate().alpha(0f).setDuration(ANIM_MS).start()
         grid.setSelection(0)
         grid.requestFocus()
+        // the grid makes its cells again when it is laid out, so the selected one is dressed after that
+        grid.post { dressSelected() }
+    }
+
+    private fun dressSelected() {
+        val v = grid.selectedView ?: return
+        if (v === selectedCell) return
+        selectedCell?.let { scaleTo(it, false); showName(it, false); showShine(tileOf(it), false) }
+        selectedCell = v.also { scaleTo(it, true); showName(it, true); showShine(tileOf(it), true) }
     }
 
     private fun hideAllApps() {
@@ -1023,8 +1032,10 @@ class MainActivity : Activity() {
             (cell.getChildAt(1) as TextView).apply {
                 text = apps[position].label
                 setTextColor(ink())
-                visibility = if (nameShown(cell.isSelected)) View.VISIBLE else View.INVISIBLE
+                // A cell that is made for the selected position is not marked as selected yet, so ask the grid.
+                visibility = if (nameShown(allAppsOpen && position == grid.selectedItemPosition)) View.VISIBLE else View.INVISIBLE
             }
+            showShine(tileOf(cell), allAppsOpen && position == grid.selectedItemPosition)
             return cell
         }
     }
@@ -1042,6 +1053,7 @@ class MainActivity : Activity() {
         if (fitted != rowHeight) {
             rowHeight = fitted
             adapter.notifyDataSetChanged()
+            grid.post { if (allAppsOpen) dressSelected() }
         }
     }
 
