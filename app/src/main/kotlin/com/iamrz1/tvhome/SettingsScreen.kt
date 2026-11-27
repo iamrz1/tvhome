@@ -79,7 +79,8 @@ class SettingsScreen(
     private val host: SettingsHost,
 ) {
     val view = FrameLayout(activity)
-    val isOpen get() = view.visibility == View.VISIBLE
+    private var closing = false
+    val isOpen get() = view.visibility == View.VISIBLE && !closing
 
     private val ui = Handler(Looper.getMainLooper())
     private val preview = ImageView(activity)
@@ -136,14 +137,24 @@ class SettingsScreen(
         focusSection = 0
         focusIndex = -1
         lightTab = Wallpapers.get(prefs.wallpaper).light
+        closing = false
         view.visibility = View.VISIBLE
         render()
         refreshPreview(0)
+        // it opens the way all apps does
+        Motion.open(view)
     }
 
     private fun hide() {
         ui.removeCallbacksAndMessages(null)
-        view.visibility = View.GONE
+        closing = true
+        Motion.close(view) {
+            view.visibility = View.GONE
+            view.alpha = 1f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            closing = false
+        }
         host.closed()
     }
 
@@ -187,9 +198,10 @@ class SettingsScreen(
         ui.postDelayed({
             if (!isOpen) return@postDelayed
             // The settings screen would be in the picture, so draw it clear. Hiding it would drop the focus.
+            val alpha = view.alpha
             view.alpha = 0f
             val bitmap = host.snapshot()
-            view.alpha = 1f
+            view.alpha = alpha
             preview.setImageBitmap(bitmap)
             shown?.recycle()
             shown = bitmap
@@ -419,7 +431,7 @@ class SettingsScreen(
                 setStroke(dp(6), p.optionFocus)
                 cornerRadius = Corners.radius(dp(14).toFloat())
             } else null
-            cell.animate().scaleX(if (focused) 1.06f else 1f).scaleY(if (focused) 1.06f else 1f).setDuration(120).start()
+            Motion.focus(cell, focused, 1.1f)
         }
         style(false)
         cell.setOnFocusChangeListener { _, f -> style(f) }
