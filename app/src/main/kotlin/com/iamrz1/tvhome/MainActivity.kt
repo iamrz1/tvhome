@@ -230,7 +230,7 @@ class MainActivity : Activity() {
         layoutDock()
         allApps.setBackgroundColor(palette.overlay)
         allTitle.setTextColor(palette.label)
-        allTitle.typeface = if (apple()) lightFont() else Typeface.DEFAULT
+        allTitle.typeface = lightFont()
         allTitle.textSize = if (apple()) 30f else 24f
         fillPill()
         driftWallpaper()
@@ -298,14 +298,14 @@ class MainActivity : Activity() {
     private fun ringFrame(color: Int, strokeDp: Int, width: Int = tileWidth(), height: Int = TILE_H) =
         RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), tileRadius(height), width, height)
 
-    // the Apple TV style springs up past its size and settles
+    // a focused tile springs up past its size and settles
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
         val anim = v.animate().scaleX(s).scaleY(s)
-        if (apple() && active) {
+        if (active) {
             anim.setDuration(280).setInterpolator(OvershootInterpolator(1.8f))
         } else {
-            anim.setDuration(if (apple()) 180 else 120).setInterpolator(DecelerateInterpolator())
+            anim.setDuration(180).setInterpolator(DecelerateInterpolator())
         }
         anim.start()
     }
@@ -317,7 +317,7 @@ class MainActivity : Activity() {
     ).apply { cornerRadius = tileRadius(height) }
 
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
-        tile?.foreground = if (on && apple() && liftStyle()) shine(height) else null
+        tile?.foreground = if (on && liftStyle()) shine(height) else null
     }
 
     private fun icon(app: AppEntry): Drawable =
@@ -344,7 +344,7 @@ class MainActivity : Activity() {
             format24Hour = "HH:mm"
             format12Hour = "HH:mm"
             textSize = if (apple()) 28f else 22f
-            if (apple()) typeface = lightFont()
+            typeface = lightFont()
             setTextColor(palette.muted)
             setPadding(dp(14), 0, dp(10), 0)
         })
@@ -369,7 +369,7 @@ class MainActivity : Activity() {
         val icon = ImageView(this).apply { setColorFilter(palette.muted) }
         val temp = TextView(this).apply {
             textSize = if (apple()) 24f else 20f
-            if (apple()) typeface = lightFont()
+            typeface = lightFont()
             setTextColor(palette.muted)
             setPadding(dp(6), 0, 0, 0)
         }
@@ -472,7 +472,8 @@ class MainActivity : Activity() {
             dockRow.setPadding(dp(45), dp(8), dp(45), dp(44))
         } else {
             lp.setMargins(dp(20), 0, dp(20), dp(32))
-            dockRow.setPadding(dp(20), dp(8), dp(20), dp(8))
+            // the room under the tiles is for the name of the focused one
+            dockRow.setPadding(dp(20), dp(8), dp(20), dp(32))
         }
         dockScroll.layoutParams = lp
     }
@@ -605,9 +606,9 @@ class MainActivity : Activity() {
             setOnLongClickListener { showAppMenu(app, it); true }
             setOnFocusChangeListener { _, f -> dockFocused(cell, this, name, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale()) }
         }
-        // the tile is the first child of the cell. The Apple TV style fades the name in under the focused tile.
+        // the tile is the first child of the cell. The name fades in under the focused tile.
         cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
-        if (apple()) name = nameUnder(cell, app.label)
+        name = nameUnder(cell, app.label)
         return cell
     }
 
@@ -786,7 +787,7 @@ class MainActivity : Activity() {
         allTitle = TextView(this).apply {
             text = "All apps"
             textSize = if (apple()) 30f else 24f
-            if (apple()) typeface = lightFont()
+            typeface = lightFont()
             setTextColor(palette.label)
             setPadding(dp(GRID_SIDE), 0, 0, dp(16 - GRID_EDGE))
         }
@@ -812,22 +813,13 @@ class MainActivity : Activity() {
         setHomeFocusable(false)
         allApps.visibility = View.VISIBLE
         allApps.alpha = 0f
-        if (apple()) {
-            // it opens over the home screen, which stays behind it, instead of sliding in as a page
-            allApps.pivotX = allApps.width / 2f
-            allApps.pivotY = allApps.height / 2f
-            allApps.scaleX = OPEN_SCALE
-            allApps.scaleY = OPEN_SCALE
-            allApps.translationY = 0f
-            allApps.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(ANIM_MS)
-                .setInterpolator(DecelerateInterpolator()).start()
-        } else {
-            allApps.scaleX = 1f
-            allApps.scaleY = 1f
-            allApps.translationY = SLIDE.toFloat()
-            allApps.animate().alpha(1f).translationY(0f).setDuration(ANIM_MS)
-                .setInterpolator(DecelerateInterpolator()).start()
-        }
+        // it opens over the home screen, which stays behind it, instead of sliding in as a page
+        allApps.pivotX = allApps.width / 2f
+        allApps.pivotY = allApps.height / 2f
+        allApps.scaleX = OPEN_SCALE
+        allApps.scaleY = OPEN_SCALE
+        allApps.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(ANIM_MS)
+            .setInterpolator(DecelerateInterpolator()).start()
         pill.animate().alpha(0f).setDuration(ANIM_MS).start()
         dockScroll.animate().alpha(0f).setDuration(ANIM_MS).start()
         grid.setSelection(0)
@@ -839,9 +831,8 @@ class MainActivity : Activity() {
         allAppsOpen = false
         setHomeFocusable(true)
         dockRow.getChildAt(dockFocus.coerceIn(0, dockRow.childCount - 1))?.requestFocus()
-        val close = allApps.animate().alpha(0f).setDuration(ANIM_MS).setInterpolator(AccelerateInterpolator())
-        if (apple()) close.scaleX(OPEN_SCALE).scaleY(OPEN_SCALE) else close.translationY(SLIDE.toFloat())
-        close
+        allApps.animate().alpha(0f).scaleX(OPEN_SCALE).scaleY(OPEN_SCALE).setDuration(ANIM_MS)
+            .setInterpolator(AccelerateInterpolator())
             .withEndAction { if (!allAppsOpen) allApps.visibility = View.GONE }
             .start()
         pill.animate().alpha(1f).setDuration(ANIM_MS).start()
@@ -927,7 +918,7 @@ class MainActivity : Activity() {
                 // the name under a selected tile, for the focus styles that show it
                 addView(TextView(context).apply {
                     textSize = 15f
-                    typeface = if (apple()) mediumFont() else Typeface.DEFAULT_BOLD
+                    typeface = mediumFont()
                     letterSpacing = 0.05f
                     gravity = Gravity.CENTER
                     maxLines = 1
@@ -973,7 +964,6 @@ class MainActivity : Activity() {
     private val TILE_H by lazy { dp(88) }
     private val ROOM by lazy { dp(12) }
     private val GAP by lazy { dp(18) }
-    private val SLIDE by lazy { dp(40) }
     private val OPEN_SCALE = 0.94f
 
     private companion object {
