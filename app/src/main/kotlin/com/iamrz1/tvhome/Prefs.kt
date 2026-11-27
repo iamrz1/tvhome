@@ -12,8 +12,12 @@ enum class PillItem(val label: String) {
 
 enum class FocusStyle(val label: String) {
     LINE("Line"),
-    GLOW("Glow"),
     LIFT("Lift"),
+}
+
+enum class HomeStyle(val label: String) {
+    GLASS("Glass"),
+    CLASSIC("Classic"),
 }
 
 enum class IconShape(val label: String) {
@@ -33,9 +37,16 @@ class Prefs(context: Context) {
         get() = ThemeMode.entries.getOrElse(sp.getInt(KEY_THEME, ThemeMode.LIGHT.ordinal)) { ThemeMode.LIGHT }
         set(v) = sp.edit().putInt(KEY_THEME, v.ordinal).apply()
 
+    // Saved by name. The old number was the place in a list that had Glow in it, which is gone: Line stays Line, and
+    // Glow and Lift both become Lift.
     var focusStyle: FocusStyle
-        get() = FocusStyle.entries.getOrElse(sp.getInt(KEY_FOCUS, FocusStyle.LIFT.ordinal)) { FocusStyle.LIFT }
-        set(v) = sp.edit().putInt(KEY_FOCUS, v.ordinal).apply()
+        get() = sp.getString(KEY_FOCUS_NAME, null)?.let { n -> FocusStyle.entries.firstOrNull { it.name == n } }
+            ?: if (sp.getInt(KEY_FOCUS, -1) == 0) FocusStyle.LINE else FocusStyle.LIFT
+        set(v) = sp.edit().putString(KEY_FOCUS_NAME, v.name).apply()
+
+    var homeStyle: HomeStyle
+        get() = HomeStyle.entries.getOrElse(sp.getInt(KEY_STYLE, HomeStyle.CLASSIC.ordinal)) { HomeStyle.CLASSIC }
+        set(v) = sp.edit().putInt(KEY_STYLE, v.ordinal).apply()
 
     var iconShape: IconShape
         get() = IconShape.entries.getOrElse(sp.getInt(KEY_SHAPE, IconShape.ROUNDED.ordinal)) { IconShape.ROUNDED }
@@ -90,7 +101,9 @@ class Prefs(context: Context) {
         private const val KEY_WALLPAPER = "wallpaper"
         private const val KEY_THEME = "theme"
         private const val KEY_FOCUS = "focus"
+        private const val KEY_FOCUS_NAME = "focus_style"
         private const val KEY_SHAPE = "icon_shape"
+        private const val KEY_STYLE = "home_style"
         private const val KEY_DOCK = "dock"
         private const val KEY_DOCK_OPACITY = "dock_opacity"
         private const val KEY_PILL = "pill"

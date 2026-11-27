@@ -33,9 +33,19 @@ class GlowDrawable(
     override fun draw(canvas: Canvas) {
         val b = bounds
         if (b.isEmpty) return
-        val bmp = bitmap ?: render(b.width(), b.height()).also { bitmap = it }
+        val bmp = bitmap ?: shared(b.width(), b.height()).also { bitmap = it }
         canvas.drawBitmap(bmp, b.left.toFloat(), b.top.toFloat(), paint)
     }
+
+    /** Draws the halo for bounds of this size now, so the first time a tile is focused does not have to. */
+    fun preload(w: Int, h: Int) {
+        shared(w, h)
+    }
+
+    // Every cell of a grid has the same halo, so they share one bitmap. Drawing a blur is slow, and a cell that drew its
+    // own made the focus animation stutter on the first visit of each cell.
+    private fun shared(w: Int, h: Int): Bitmap =
+        cache.getOrPut("$color|$radius|$blur|$tileW|$tileH|$offsetY|$w|$h") { render(w, h) }
 
     // drawn once into a bitmap, because a blur mask filter is not available when drawing with the GPU
     private fun render(w: Int, h: Int): Bitmap {
@@ -60,6 +70,10 @@ class GlowDrawable(
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity() = PixelFormat.TRANSLUCENT
+
+    private companion object {
+        val cache = HashMap<String, Bitmap>()
+    }
 }
 
 /**

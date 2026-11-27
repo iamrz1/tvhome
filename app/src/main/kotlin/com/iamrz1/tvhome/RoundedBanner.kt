@@ -27,7 +27,8 @@ class RoundedBanner(
     private val fillCorners: Boolean = false,
 ) : Drawable() {
     private var bitmap: Bitmap? = null
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // filtered, because the tile is scaled up when it is focused, and an unfiltered bitmap is blocky then
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     override fun onBoundsChange(bounds: Rect) {
         bitmap = null
