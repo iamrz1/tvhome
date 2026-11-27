@@ -310,10 +310,11 @@ class MainActivity : Activity() {
         anim.start()
     }
 
-    // a faint shine across the focused tile
+    // A faint shine in the top left corner of the focused tile. It fades out by the middle of the tile, because a shine
+    // over the whole tile washes out a dark one.
     private fun shine(height: Int = TILE_H): Drawable = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(withAlpha(Color.WHITE, 0x61), withAlpha(Color.WHITE, 0x00)),
+        intArrayOf(withAlpha(Color.WHITE, 0x2A), withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x00)),
     ).apply { cornerRadius = tileRadius(height) }
 
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
