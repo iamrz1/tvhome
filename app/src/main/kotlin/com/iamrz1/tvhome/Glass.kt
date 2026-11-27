@@ -107,6 +107,8 @@ class GlassDrawable(
     private val topLight: Int = 0x4D,
     private val bottomLight: Int = 0x1A,
     private val dim: Boolean = false,
+    // Draw the glass into a bitmap once and show that. A view that sits in a hardware layer already does this itself.
+    private val bake: Boolean = true,
 ) : Drawable() {
     private val density = anchor.resources.displayMetrics.density
     // glass over colour makes the colour stronger, as the blurred glass of the design does
@@ -118,13 +120,40 @@ class GlassDrawable(
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val top = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val matrix = Matrix()
+    private var lightShader: Shader? = null
+    private var topShader: Shader? = null
+    private var shaderHeight = -1f
     private var shader: BitmapShader? = null
     private var shaderBitmap: Bitmap? = null
     private val where = IntArray(2)
 
+    private var baked: Bitmap? = null
+    private var bakedKey = ""
+
     override fun draw(canvas: Canvas) {
         val b = bounds
         if (b.isEmpty) return
+        anchor.getLocationInWindow(where)
+        if (!bake) {
+            paint(canvas, b)
+            return
+        }
+        // Five layers of shaders over a wide area are slow on a weak GPU, and they were drawn again for every frame of
+        // a tile that moves on top of them. The result only changes with the size, the place, the wallpaper and the corner.
+        val key = "${b.left},${b.top},${b.width()},${b.height()},${where[0]},${where[1]},${System.identityHashCode(GlassBlur.bitmap)},${radius()}"
+        var bmp = baked
+        if (bmp == null || key != bakedKey) {
+            bmp = Bitmap.createBitmap(b.width(), b.height(), Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            c.translate(-b.left.toFloat(), -b.top.toFloat())
+            paint(c, b)
+            baked = bmp
+            bakedKey = key
+        }
+        canvas.drawBitmap(bmp, b.left.toFloat(), b.top.toFloat(), null)
+    }
+
+    private fun paint(canvas: Canvas, b: android.graphics.Rect) {
         val rect = RectF(b)
         val r = radius().let { if (it < 0f) min(rect.width(), rect.height()) / 2f else it }
         GlassBlur.bitmap?.let { bmp ->
@@ -133,7 +162,6 @@ class GlassDrawable(
                 shaderBitmap = bmp
             }
             // the copy stands for the whole window, so it is moved back by where this view is in the window
-            anchor.getLocationInWindow(where)
             matrix.setScale(GlassBlur.scaleX(), GlassBlur.scaleY())
             matrix.postTranslate(-where[0].toFloat(), -where[1].toFloat())
             shader?.setLocalMatrix(matrix)
@@ -143,10 +171,19 @@ class GlassDrawable(
         fill.color = tint
         canvas.drawRoundRect(rect, r, r, fill)
         if (dim) return
-        light.shader = LinearGradient(
-            0f, rect.top, 0f, rect.bottom,
-            Color.argb(topLight, 255, 255, 255), Color.argb(bottomLight, 255, 255, 255), Shader.TileMode.CLAMP,
-        )
+        // the gradients only change with the size, so they are not made again for every frame
+        if (shaderHeight != rect.height() + rect.top) {
+            lightShader = LinearGradient(
+                0f, rect.top, 0f, rect.bottom,
+                Color.argb(topLight, 255, 255, 255), Color.argb(bottomLight, 255, 255, 255), Shader.TileMode.CLAMP,
+            )
+            topShader = LinearGradient(
+                0f, rect.top, 0f, rect.top + rect.height() * 0.4f,
+                Color.argb(0xBB, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP,
+            )
+            shaderHeight = rect.height() + rect.top
+        }
+        light.shader = lightShader
         canvas.drawRoundRect(rect, r, r, light)
         val thin = density
         edge.strokeWidth = thin
@@ -155,10 +192,7 @@ class GlassDrawable(
         val inner = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
         canvas.drawRoundRect(inner, r - inset, r - inset, edge)
         top.strokeWidth = thin * 1.5f
-        top.shader = LinearGradient(
-            0f, rect.top, 0f, rect.top + rect.height() * 0.4f,
-            Color.argb(0xBB, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP,
-        )
+        top.shader = topShader
         canvas.drawRoundRect(inner, r - inset, r - inset, top)
     }
 

@@ -50,10 +50,13 @@ class MainActivity : Activity() {
     private lateinit var prefs: Prefs
     private lateinit var palette: Palette
     private lateinit var root: FrameLayout
+    private lateinit var wallpaperView: View
     private lateinit var pill: LinearLayout
     private lateinit var dockScroll: HorizontalScrollView
     private lateinit var dockRow: LinearLayout
     private lateinit var allApps: View
+    private lateinit var allBg: View
+    private lateinit var allContent: LinearLayout
     private lateinit var allTitle: TextView
     private lateinit var grid: GridView
     private lateinit var settings: SettingsScreen
@@ -88,6 +91,10 @@ class MainActivity : Activity() {
         Panel.dark = palette.dark
         Corners.square = prefs.iconShape == IconShape.RECTANGLE
         root = FrameLayout(this)
+        // The wallpaper is a view of its own, drawn once into a hardware layer. A wallpaper with spots of light is several
+        // full screen shaders, and it was drawn again for every frame of whatever moved over it.
+        wallpaperView = View(this).apply { setLayerType(View.LAYER_TYPE_HARDWARE, null) }
+        root.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         setWallpaper()
         setContentView(root)
         root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> refreshGlass() }
@@ -159,7 +166,7 @@ class MainActivity : Activity() {
     }
 
     private fun setWallpaper() {
-        wallpaper = Wallpapers.get(prefs.wallpaper).drawable().also { root.background = it }
+        wallpaper = Wallpapers.get(prefs.wallpaper).drawable().also { wallpaperView.background = it }
         blurredFor = null
     }
 
@@ -172,7 +179,7 @@ class MainActivity : Activity() {
         blurredFor = wp
         pill.invalidate()
         dockScroll.invalidate()
-        allApps.invalidate()
+        allBg.invalidate()
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -285,8 +292,8 @@ class MainActivity : Activity() {
 
     // What a dock or grid cell draws behind its tile while the tile is focused (activated) or selected. Both styles
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
-    private fun cellBackground(width: Int = TILE_W, height: Int = TILE_H): Drawable {
-        val mark = focusMark(width, height)
+    private fun cellBackground(width: Int = TILE_W, height: Int = TILE_H, soft: Boolean = false): Drawable {
+        val mark = focusMark(width, height, soft)
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_activated), mark)
             addState(intArrayOf(android.R.attr.state_selected), mark)
@@ -294,10 +301,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun focusMark(width: Int, height: Int): Drawable {
+    // A soft halo is for the grid, where the tiles are close together. The neighbor on the left is drawn before the focused
+    // cell, so a halo that reaches it shows as a dark line on its edge. This one is narrower and fainter.
+    private fun focusMark(width: Int, height: Int, soft: Boolean = false): Drawable {
         val w = tileWidth(width, height)
         val r = tileRadius(height)
-        return if (liftStyle() && glass()) {
+        return if (liftStyle() && soft) {
+            GlowDrawable(Color.argb(0x5C, 20, 8, 60), r, dp(9).toFloat(), w - dp(18), height, dp(9).toFloat())
+        } else if (liftStyle() && glass()) {
             GlowDrawable(Color.argb(0x80, 20, 8, 60), r, dp(14).toFloat(), w, height, dp(10).toFloat())
         } else if (liftStyle()) {
             GlowDrawable(withAlpha(Color.BLACK, 0x80), r, dp(8).toFloat(), w, height, dp(3).toFloat())
@@ -310,7 +321,7 @@ class MainActivity : Activity() {
     private fun warmGrid() {
         val cellW = (grid.width - grid.paddingLeft - grid.paddingRight) / COLUMNS
         val cellH = if (rowHeight > 0) rowHeight else baseRowHeight()
-        if (cellW > 0) (focusMark(TILE_W, TILE_H) as? GlowDrawable)?.preload(cellW, cellH)
+        if (cellW > 0) (focusMark(TILE_W, TILE_H, soft = true) as? GlowDrawable)?.preload(cellW, cellH)
     }
 
     private fun ringFrame(color: Int, strokeDp: Int, width: Int = tileWidth(), height: Int = TILE_H) =
@@ -805,9 +816,10 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             selector = ColorDrawable(Color.TRANSPARENT)
-            // A row that has scrolled up must not show over the title. The grid clips at its own edge, so its padding is
-            // the room for what a selected tile draws outside its cell: the scale, the shadow and the name.
-            clipChildren = true
+            // A row that has scrolled up must not show over what is above the grid. The layout around the grid clips it at
+            // the grid's edge, so the padding is the room for what a selected tile draws outside its cell: the scale, the
+            // shadow and the name. The cells do not clip, or their shadow would end in a line at the side of the cell.
+            clipChildren = false
             clipToPadding = false
             setPadding(dp(GRID_SIDE), dp(GRID_EDGE), dp(GRID_SIDE), dp(GRID_EDGE))
             adapter = this@MainActivity.adapter
@@ -832,15 +844,22 @@ class MainActivity : Activity() {
             typeface = lightFont()
             setPadding(dp(GRID_SIDE), 0, 0, dp(16 - GRID_EDGE))
         }
-        allApps = LinearLayout(this).apply {
+        // The background is a view of its own, drawn once into a hardware layer. It is a full screen of glass, which is slow
+        // to draw on a weak device, and it must not be drawn again for every frame of a tile that is moving over it.
+        allBg = View(this).apply { setLayerType(View.LAYER_TYPE_HARDWARE, null) }
+        allContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             // The grid clips at its own edge, which keeps a scrolled row off the title, and its padding is the room that a
             // selected cell needs for its scale. So this layout clips neither its padding nor its child.
             clipChildren = true
             clipToPadding = false
-            visibility = View.GONE
             addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        }
+        allApps = FrameLayout(this).apply {
+            visibility = View.GONE
+            addView(allBg, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            addView(allContent, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
         root.addView(allApps, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         styleAllApps()
@@ -848,24 +867,24 @@ class MainActivity : Activity() {
 
     // Glass: a dim, blurred wallpaper over the home screen with a sheet of glass on it. Classic: a plain wash.
     private fun styleAllApps() {
-        allTitle.setTextColor(ink())
-        allTitle.textSize = if (glass()) 30f else 24f
+        // the title is not needed, and its space goes to the rows
+        allTitle.visibility = View.GONE
         if (glass()) {
-            allApps.background = LayerDrawable(
+            allBg.background = LayerDrawable(
                 arrayOf(
-                    GlassDrawable(allApps, { 0f }, Color.argb(0x57, 24, 10, 64), dim = true),
+                    GlassDrawable(allBg, { 0f }, Color.argb(0x57, 24, 10, 64), dim = true, bake = false),
                     InsetDrawable(
-                        GlassDrawable(allApps, { Corners.radius(dp(24).toFloat()) }, Color.argb(0x33, 44, 22, 110), 0x42, 0x14),
+                        GlassDrawable(allBg, { Corners.radius(dp(24).toFloat()) }, Color.argb(0x33, 44, 22, 110), 0x42, 0x14, bake = false),
                         dp(SHEET_SIDE), dp(SHEET_EDGE), dp(SHEET_SIDE), dp(SHEET_EDGE),
                     ),
                 ),
             )
-            allApps.setPadding(
-                dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 24), dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 14 - GRID_EDGE),
+            allContent.setPadding(
+                dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 16 - GRID_EDGE), dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 16 - GRID_EDGE),
             )
         } else {
-            allApps.setBackgroundColor(palette.overlay)
-            allApps.setPadding(dp(32 - GRID_SIDE), dp(40), dp(32 - GRID_SIDE), dp(24 - GRID_EDGE))
+            allBg.setBackgroundColor(palette.overlay)
+            allContent.setPadding(dp(32 - GRID_SIDE), dp(32 - GRID_EDGE), dp(32 - GRID_SIDE), dp(32 - GRID_EDGE))
         }
     }
 
@@ -981,27 +1000,27 @@ class MainActivity : Activity() {
                 addView(newTile(), FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
                 // the name under a selected tile, for the focus styles that show it
                 addView(TextView(context).apply {
-                    textSize = 15f
+                    textSize = 14f
                     typeface = mediumFont()
-                    letterSpacing = 0.05f
+                    letterSpacing = 0.02f
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                     visibility = View.INVISIBLE
                     if (glass()) {
                         // a glass capsule under the tile
-                        setPadding(dp(18), 0, dp(18), 0)
+                        setPadding(dp(12), 0, dp(12), 0)
                         background = capsule(this)
                     }
                 }, if (glass()) {
-                    FrameLayout.LayoutParams(WRAP_CONTENT, dp(26), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = -dp(8) }
+                    FrameLayout.LayoutParams(WRAP_CONTENT, dp(26), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(2) }
                 } else {
                     FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) }
                 })
             }
             cell.getChildAt(0).layoutParams = FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER)
             cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, if (rowHeight > 0) rowHeight else baseRowHeight())
-            cell.background = cellBackground()
+            cell.background = cellBackground(soft = true)
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
             showShine(tileOf(cell), false)
             (cell.getChildAt(1) as TextView).apply {
@@ -1053,7 +1072,7 @@ class MainActivity : Activity() {
         const val SHEET_SIDE = 28
         const val SHEET_EDGE = 22
         const val ROUND = "round"
-        const val GRID_EDGE = 12
+        const val GRID_EDGE = 18
 
         // a row may be this much of the height it needs, so the rows can share the height of the grid
         const val MIN_ROW = 0.9f

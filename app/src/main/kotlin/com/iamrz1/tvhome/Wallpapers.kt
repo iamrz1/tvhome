@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
@@ -20,11 +21,20 @@ class Wallpaper(val name: String, val light: Boolean, private val angle: Int, va
     private val stops = FloatArray(hex.size) { it / (hex.size - 1f) }
     private val glows = ArrayList<Glow>()
 
-    /** A spot of light: its center as a part of the width and the height, its radius as a part of the width, and its color. */
-    class Glow(val x: Float, val y: Float, val radius: Float, val color: Int)
+    /**
+     * A spot of light: its center as a part of the width and the height, and how far it reaches as a part of the width
+     * and of the height, so it can be an ellipse. [orb] is a ball with a lit side instead: [color] is its lit side, [dark]
+     * the other, and [reach] its diameter as a part of the width.
+     */
+    class Glow(val x: Float, val y: Float, val reach: Float, val reachY: Float, val color: Int, val dark: Int = 0, val orb: Boolean = false)
 
     /** Adds a spot of light over the gradient, which gives glass something to show. [hex] may carry an alpha. */
-    fun glow(x: Float, y: Float, radius: Float, hex: String) = apply { glows += Glow(x, y, radius, Color.parseColor(hex)) }
+    fun glow(x: Float, y: Float, reach: Float, hex: String, reachY: Float = reach * 16f / 9f) =
+        apply { glows += Glow(x, y, reach, reachY, Color.parseColor(hex)) }
+
+    /** Adds a glossy ball, which gives the blur of the glass a shape to show. */
+    fun orb(x: Float, y: Float, diameter: Float, lit: String, dark: String) =
+        apply { glows += Glow(x, y, diameter, diameter, Color.parseColor(lit), Color.parseColor(dark), orb = true) }
 
     fun drawable() = Gradient(colors, stops, angle, glows.toList())
 
@@ -37,21 +47,36 @@ class Wallpaper(val name: String, val light: Boolean, private val angle: Int, va
     ) : Drawable() {
         private val paint = Paint()
         private val glowPaints = glows.map { Paint(Paint.ANTI_ALIAS_FLAG) }
+        private val matrix = Matrix()
 
         override fun draw(canvas: Canvas) {
             val b = bounds
             if (b.isEmpty) return
+            val w = b.width().toFloat()
+            val h = b.height().toFloat()
             if (paint.shader == null) {
                 paint.shader = shader(b.width(), b.height())
                 glows.forEachIndexed { i, g ->
-                    val r = g.radius * b.width()
-                    glowPaints[i].shader = RadialGradient(
-                        g.x * b.width(), g.y * b.height(), r, g.color, g.color and 0x00FFFFFF, Shader.TileMode.CLAMP,
-                    )
+                    if (g.orb) {
+                        val d = g.reach * w
+                        glowPaints[i].shader = RadialGradient(
+                            g.x * w - d * 0.15f, g.y * h - d * 0.20f, d * 0.955f,
+                            intArrayOf(g.color, g.dark, g.dark), floatArrayOf(0f, 0.7f, 1f), Shader.TileMode.CLAMP,
+                        )
+                    } else {
+                        // a round gradient of radius one, stretched to the ellipse
+                        val shader = RadialGradient(0f, 0f, 1f, g.color, g.color and 0x00FFFFFF, Shader.TileMode.CLAMP)
+                        matrix.setScale(g.reach * w, g.reachY * h)
+                        matrix.postTranslate(g.x * w, g.y * h)
+                        shader.setLocalMatrix(matrix)
+                        glowPaints[i].shader = shader
+                    }
                 }
             }
             canvas.drawRect(b, paint)
-            glowPaints.forEach { canvas.drawRect(b, it) }
+            glows.forEachIndexed { i, g ->
+                if (g.orb) canvas.drawCircle(g.x * w, g.y * h, g.reach * w / 2f, glowPaints[i]) else canvas.drawRect(b, glowPaints[i])
+            }
         }
 
         override fun onBoundsChange(bounds: Rect) {
@@ -107,10 +132,13 @@ object Wallpapers {
         Wallpaper("Dawn", true, 65, "#8F7BD6", "#E3A1C4", "#F9D2B8"),
         Wallpaper("Mint", true, 65, "#C8F0DC", "#E8F7C8", "#BFE3F5"),
         // vivid, with spots of light, for the glass style
-        Wallpaper("Prism", false, 35, "#4B2FC9", "#A53BB5", "#FF7F66")
-            .glow(0.10f, 0.10f, 0.55f, "#D93DD6F5")
-            .glow(0.92f, 0.12f, 0.50f, "#D9FF70A8")
-            .glow(0.90f, 0.98f, 0.60f, "#F2FFCF64"),
+        // the wallpaper of the glass design
+        Wallpaper("Prism", false, 45, "#4B2FC9", "#A53BB5", "#FF7F66")
+            .glow(0.10f, 0.08f, 0.3224f, "#D93DD6F5", 0.3844f)
+            .glow(0.92f, 0.12f, 0.3072f, "#D9FF70A8", 0.3840f)
+            .glow(0.90f, 0.98f, 0.3472f, "#F2FFCF64", 0.4092f)
+            .orb(0.1492f, 0.5486f, 0.1484f, "#7DF3FF", "#1FA8E8")
+            .orb(0.8984f, 0.6528f, 0.1719f, "#FFE08A", "#FF8A3D"),
         Wallpaper("Lumen", false, 30, "#0F2A6B", "#1E6FD9", "#3CE0D0")
             .glow(0.92f, 0.10f, 0.50f, "#CCFF5FA8")
             .glow(0.12f, 0.95f, 0.55f, "#CCFFC857"),
