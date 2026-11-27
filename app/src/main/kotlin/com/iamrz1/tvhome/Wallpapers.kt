@@ -6,6 +6,7 @@ import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
@@ -17,18 +18,40 @@ import kotlin.math.sin
 class Wallpaper(val name: String, val light: Boolean, private val angle: Int, vararg hex: String) {
     private val colors = IntArray(hex.size) { Color.parseColor(hex[it]) }
     private val stops = FloatArray(hex.size) { it / (hex.size - 1f) }
+    private val glows = ArrayList<Glow>()
 
-    fun drawable() = Gradient(colors, stops, angle)
+    /** A spot of light: its center as a part of the width and the height, its radius as a part of the width, and its color. */
+    class Glow(val x: Float, val y: Float, val radius: Float, val color: Int)
 
-    /** Gradient draws the colors along its angle. */
-    class Gradient(private val colors: IntArray, private val stops: FloatArray, private val angle: Int) : Drawable() {
+    /** Adds a spot of light over the gradient, which gives glass something to show. [hex] may carry an alpha. */
+    fun glow(x: Float, y: Float, radius: Float, hex: String) = apply { glows += Glow(x, y, radius, Color.parseColor(hex)) }
+
+    fun drawable() = Gradient(colors, stops, angle, glows.toList())
+
+    /** Gradient draws the colors along its angle, and the spots of light over them. */
+    class Gradient(
+        private val colors: IntArray,
+        private val stops: FloatArray,
+        private val angle: Int,
+        private val glows: List<Glow>,
+    ) : Drawable() {
         private val paint = Paint()
+        private val glowPaints = glows.map { Paint(Paint.ANTI_ALIAS_FLAG) }
 
         override fun draw(canvas: Canvas) {
             val b = bounds
             if (b.isEmpty) return
-            if (paint.shader == null) paint.shader = shader(b.width(), b.height())
+            if (paint.shader == null) {
+                paint.shader = shader(b.width(), b.height())
+                glows.forEachIndexed { i, g ->
+                    val r = g.radius * b.width()
+                    glowPaints[i].shader = RadialGradient(
+                        g.x * b.width(), g.y * b.height(), r, g.color, g.color and 0x00FFFFFF, Shader.TileMode.CLAMP,
+                    )
+                }
+            }
             canvas.drawRect(b, paint)
+            glowPaints.forEach { canvas.drawRect(b, it) }
         }
 
         override fun onBoundsChange(bounds: Rect) {
@@ -83,7 +106,23 @@ object Wallpapers {
         Wallpaper("Candy", true, 65, "#FFD3DE", "#FFF6BD", "#B7E8FF"),
         Wallpaper("Dawn", true, 65, "#8F7BD6", "#E3A1C4", "#F9D2B8"),
         Wallpaper("Mint", true, 65, "#C8F0DC", "#E8F7C8", "#BFE3F5"),
-        Wallpaper("Prism", false, 35, "#4B2FC9", "#A53BB5", "#FF7F66"),
+        // vivid, with spots of light, for the glass style
+        Wallpaper("Prism", false, 35, "#4B2FC9", "#A53BB5", "#FF7F66")
+            .glow(0.10f, 0.10f, 0.55f, "#D93DD6F5")
+            .glow(0.92f, 0.12f, 0.50f, "#D9FF70A8")
+            .glow(0.90f, 0.98f, 0.60f, "#F2FFCF64"),
+        Wallpaper("Lumen", false, 30, "#0F2A6B", "#1E6FD9", "#3CE0D0")
+            .glow(0.92f, 0.10f, 0.50f, "#CCFF5FA8")
+            .glow(0.12f, 0.95f, 0.55f, "#CCFFC857"),
+        Wallpaper("Nebula", false, 40, "#1B1048", "#6B2FB8", "#E04F9A")
+            .glow(0.85f, 0.90f, 0.50f, "#CC3DE0F5")
+            .glow(0.10f, 0.10f, 0.50f, "#B3FF9A4D"),
+        Wallpaper("Coral", false, 120, "#FF6F61", "#FF3D81", "#7A3DFF")
+            .glow(0.10f, 0.90f, 0.55f, "#E6FFD36B")
+            .glow(0.90f, 0.10f, 0.50f, "#B34DE1FF"),
+        Wallpaper("Opal", true, 65, "#BFD9FF", "#E6C8FF", "#FFD3E0")
+            .glow(0.10f, 0.10f, 0.50f, "#CC8EF0E0")
+            .glow(0.90f, 0.90f, 0.55f, "#CCFFC8A0"),
     )
 
     /** What a fresh install starts with. */

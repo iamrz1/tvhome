@@ -286,20 +286,31 @@ class MainActivity : Activity() {
     // What a dock or grid cell draws behind its tile while the tile is focused (activated) or selected. Both styles
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
     private fun cellBackground(width: Int = TILE_W, height: Int = TILE_H): Drawable {
+        val mark = focusMark(width, height)
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_activated), mark)
+            addState(intArrayOf(android.R.attr.state_selected), mark)
+            addState(intArrayOf(), GradientDrawable())
+        }
+    }
+
+    private fun focusMark(width: Int, height: Int): Drawable {
         val w = tileWidth(width, height)
         val r = tileRadius(height)
-        val mark: Drawable = if (liftStyle() && glass()) {
+        return if (liftStyle() && glass()) {
             GlowDrawable(Color.argb(0x80, 20, 8, 60), r, dp(14).toFloat(), w, height, dp(10).toFloat())
         } else if (liftStyle()) {
             GlowDrawable(withAlpha(Color.BLACK, 0x80), r, dp(8).toFloat(), w, height, dp(3).toFloat())
         } else {
             ringFrame(Color.WHITE, 3, w, height)
         }
-        return StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_activated), mark)
-            addState(intArrayOf(android.R.attr.state_selected), mark)
-            addState(intArrayOf(), GradientDrawable())
-        }
+    }
+
+    // draws the halo of a grid cell once, before the first tile is focused, so the focus animation does not stutter
+    private fun warmGrid() {
+        val cellW = (grid.width - grid.paddingLeft - grid.paddingRight) / COLUMNS
+        val cellH = if (rowHeight > 0) rowHeight else baseRowHeight()
+        if (cellW > 0) (focusMark(TILE_W, TILE_H) as? GlowDrawable)?.preload(cellW, cellH)
     }
 
     private fun ringFrame(color: Int, strokeDp: Int, width: Int = tileWidth(), height: Int = TILE_H) =
@@ -502,7 +513,8 @@ class MainActivity : Activity() {
         dockScroll.setPadding(0, 0, 0, 0)
         val lp = dockScroll.layoutParams as FrameLayout.LayoutParams
         if (glass()) {
-            lp.setMargins(dp(GLASS_MARGIN), 0, dp(GLASS_MARGIN), dp(70))
+            // the card keeps its place, the band is under it
+            lp.setMargins(dp(GLASS_MARGIN), 0, dp(GLASS_MARGIN), dp(110 - NAME_BAND))
             // the first cell has half a gap of margin, which is part of the space to the edge of the card
             val side = dp(GLASS_PAD) - dockGap() / 2
             dockRow.setPadding(side, dp(8), side, dp(8 + NAME_BAND))
@@ -790,6 +802,7 @@ class MainActivity : Activity() {
     private fun buildAllApps() {
         grid = GridView(this).apply {
             numColumns = COLUMNS
+            isVerticalScrollBarEnabled = false
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             selector = ColorDrawable(Color.TRANSPARENT)
             // A row that has scrolled up must not show over the title. The grid clips at its own edge, so its padding is
@@ -861,6 +874,7 @@ class MainActivity : Activity() {
         allAppsOpen = true
         dockFocus = dockIndex(currentFocus).coerceAtLeast(0)
         setHomeFocusable(false)
+        warmGrid()
         allApps.visibility = View.VISIBLE
         allApps.alpha = 0f
         // it opens over the home screen, which stays behind it, instead of sliding in as a page
@@ -980,7 +994,7 @@ class MainActivity : Activity() {
                         background = capsule(this)
                     }
                 }, if (glass()) {
-                    FrameLayout.LayoutParams(WRAP_CONTENT, dp(26), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(6) }
+                    FrameLayout.LayoutParams(WRAP_CONTENT, dp(26), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = -dp(8) }
                 } else {
                     FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) }
                 })
@@ -1033,8 +1047,9 @@ class MainActivity : Activity() {
         const val GRID_SIDE = 20
         const val GLASS_MARGIN = 24
         const val GLASS_PAD = 26
-        // the band under the glass dock for the name of the focused tile
-        const val NAME_BAND = 40
+        // The band under the glass dock for the name of the focused tile. The focused cell is scaled up, which moves the
+        // name further down, so the band holds it with room to spare.
+        const val NAME_BAND = 60
         const val SHEET_SIDE = 28
         const val SHEET_EDGE = 22
         const val ROUND = "round"
