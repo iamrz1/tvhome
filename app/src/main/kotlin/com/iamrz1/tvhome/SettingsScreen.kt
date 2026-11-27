@@ -233,6 +233,12 @@ class SettingsScreen(
                     changed()
                 }
             }),
+            Section("Icon shape", IconShape.entries.map { shape ->
+                Option(shape.label, checked = shape == prefs.iconShape) {
+                    prefs.iconShape = shape
+                    changed()
+                }
+            }),
             Section("Focus highlight", FocusStyle.entries.map { style ->
                 Option(style.label, checked = style == prefs.focusStyle) {
                     prefs.focusStyle = style

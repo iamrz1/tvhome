@@ -155,6 +155,22 @@ class MainActivity : Activity() {
         cornerRadius = dp(radiusDp).toFloat()
     }
 
+    private fun circle() = prefs.iconShape == IconShape.CIRCLE
+
+    // the corner radius of a tile: none for a rectangle, and half the height for a circle, which is as wide as it is high
+    private fun tileRadius() = when (prefs.iconShape) {
+        IconShape.RECTANGLE -> 0f
+        IconShape.ROUNDED -> dp(14).toFloat()
+        IconShape.CIRCLE -> TILE_H / 2f
+    }
+
+    private fun tileWidth() = if (circle()) TILE_H else TILE_W
+
+    // a circle shows the name under it all the time, and the lift style shows the name of the selected tile
+    private fun namesBelow() = circle() || liftStyle()
+
+    private fun nameShown(selected: Boolean) = circle() || (liftStyle() && selected)
+
     private fun withAlpha(color: Int, alpha: Int) = (color and 0x00FFFFFF) or (alpha shl 24)
 
     private fun applyTheme() {
@@ -179,7 +195,8 @@ class MainActivity : Activity() {
     // the dock card has a thin edge, so it still reads as a card when it is clear
     private fun dockBackground() = GradientDrawable().apply {
         setColor(palette.dock)
-        cornerRadius = dp(28).toFloat()
+        // the dock follows the icons when they are rectangles
+        cornerRadius = if (prefs.iconShape == IconShape.RECTANGLE) 0f else dp(28).toFloat()
         setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
     }
 
@@ -208,9 +225,9 @@ class MainActivity : Activity() {
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
     private fun cellBackground(): Drawable {
         val mark: Drawable = if (liftStyle()) {
-            GlowDrawable(withAlpha(Color.BLACK, 0x80), dp(14).toFloat(), dp(8).toFloat(), TILE_W, TILE_H, dp(3).toFloat())
+            GlowDrawable(withAlpha(Color.BLACK, 0x80), tileRadius(), dp(8).toFloat(), tileWidth(), TILE_H, dp(3).toFloat())
         } else if (glowStyle()) {
-            GlowDrawable(withAlpha(Color.WHITE, 0xC0), dp(14).toFloat(), dp(10).toFloat(), TILE_W, TILE_H)
+            GlowDrawable(withAlpha(Color.WHITE, 0xC0), tileRadius(), dp(10).toFloat(), tileWidth(), TILE_H)
         } else {
             ringFrame(palette.focus, 3)
         }
@@ -222,7 +239,7 @@ class MainActivity : Activity() {
     }
 
     private fun ringFrame(color: Int, strokeDp: Int) =
-        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), dp(14).toFloat(), TILE_W, TILE_H)
+        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), tileRadius(), tileWidth(), TILE_H)
 
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
@@ -407,11 +424,15 @@ class MainActivity : Activity() {
 
     private fun bindTile(tile: FrameLayout, app: AppEntry) {
         tile.removeAllViews()
-        tile.background = round(palette.tile, 14)
-        val banner = app.info.activityInfo.loadBanner(packageManager)
-        if (banner != null) {
+        tile.background = GradientDrawable().apply {
+            setColor(palette.tile)
+            cornerRadius = tileRadius()
+        }
+        // a circle shows the app icon, because a wide banner does not fit in it
+        val art = if (circle()) app.info.loadIcon(packageManager) else app.info.activityInfo.loadBanner(packageManager)
+        if (art != null) {
             tile.addView(ImageView(this).apply {
-                setImageDrawable(RoundedBanner(banner, dp(14).toFloat()))
+                setImageDrawable(RoundedBanner(art, tileRadius()))
                 scaleType = ImageView.ScaleType.FIT_XY
             })
             return
@@ -457,7 +478,7 @@ class MainActivity : Activity() {
                 scaleTo(cell, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale())
             }
         }
-        cell.addView(tile, FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
+        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER))
         return cell
     }
 
@@ -699,20 +720,21 @@ class MainActivity : Activity() {
                     visibility = View.INVISIBLE
                 }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) })
             }
-            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM + if (liftStyle()) dp(32) else 0)
+            cell.getChildAt(0).layoutParams = FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER)
+            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM + if (namesBelow()) dp(32) else 0)
             cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
             (cell.getChildAt(1) as TextView).apply {
                 text = apps[position].label
                 setTextColor(palette.label)
-                visibility = if (liftStyle() && cell.isSelected) View.VISIBLE else View.INVISIBLE
+                visibility = if (nameShown(cell.isSelected)) View.VISIBLE else View.INVISIBLE
             }
             return cell
         }
     }
 
     private fun showName(cell: View, on: Boolean) {
-        (cell as? FrameLayout)?.getChildAt(1)?.visibility = if (on && liftStyle()) View.VISIBLE else View.INVISIBLE
+        (cell as? FrameLayout)?.getChildAt(1)?.visibility = if (nameShown(on)) View.VISIBLE else View.INVISIBLE
     }
 
     // five tiles and four gaps fit the dock, and ROOM around a tile is what the highlight can use
