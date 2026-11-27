@@ -341,19 +341,12 @@ class MainActivity : Activity() {
         anim.start()
     }
 
-    // A faint shine in the top left corner of the focused tile. It fades out by the middle of the tile, because a shine
-    // over the whole tile washes out a dark one.
-    private fun shine(height: Int = TILE_H): Drawable = GradientDrawable(
-        GradientDrawable.Orientation.TL_BR,
-        intArrayOf(withAlpha(Color.WHITE, 0x2A), withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x00)),
-    ).apply { cornerRadius = tileRadius(height) }
-
-    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring, and
-    // nothing over the artwork, which a band of light washed out. Elsewhere a lifted tile has a shine in its corner.
+    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring. Nothing
+    // is drawn over the artwork of a tile on any style, because a light layer washes it out.
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
         tile ?: return
         if (!glass()) {
-            tile.foreground = if (on && liftStyle()) shine(height) else null
+            tile.foreground = null
             return
         }
         val radius = if (tile.tag == ROUND) (if (Corners.square) 0f else height / 2f) else tileRadius(height)
