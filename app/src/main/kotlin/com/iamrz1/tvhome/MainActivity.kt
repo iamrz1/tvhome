@@ -67,6 +67,7 @@ class MainActivity : Activity() {
 
     private val adapter = AppsAdapter()
     private val icons = HashMap<String, Drawable>()
+    private var rowHeight = 0
     private var selectedCell: View? = null
     private var customizeButton: View? = null
     private var apps: List<AppEntry> = emptyList()
@@ -568,11 +569,13 @@ class MainActivity : Activity() {
         grid = GridView(this).apply {
             numColumns = COLUMNS
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            verticalSpacing = dp(4)
             selector = ColorDrawable(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
+            // the scaled name under a selected tile of the last row hangs below the row, and the grid clips at its edge
+            setPadding(0, 0, 0, dp(GRID_BOTTOM))
             adapter = this@MainActivity.adapter
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitRows() }
             setOnItemClickListener { _, _, pos, _ -> Apps.launch(this@MainActivity, apps[pos]) }
             setOnItemLongClickListener { _, view, pos, _ -> showAppMenu(apps[pos], view); true }
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -598,7 +601,7 @@ class MainActivity : Activity() {
             // a selected cell is scaled up, so the grid must be free to draw outside its own bounds
             clipChildren = false
             setBackgroundColor(palette.overlay)
-            setPadding(dp(32), dp(40), dp(32), dp(24))
+            setPadding(dp(32), dp(40), dp(32), dp(24 - GRID_BOTTOM))
             visibility = View.GONE
             addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
@@ -723,7 +726,7 @@ class MainActivity : Activity() {
                 }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) })
             }
             cell.getChildAt(0).layoutParams = FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER)
-            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM + if (namesBelow()) dp(32) else 0)
+            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, if (rowHeight > 0) rowHeight else baseRowHeight())
             cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
             (cell.getChildAt(1) as TextView).apply {
@@ -732,6 +735,22 @@ class MainActivity : Activity() {
                 visibility = if (nameShown(cell.isSelected)) View.VISIBLE else View.INVISIBLE
             }
             return cell
+        }
+    }
+
+    // the height a row needs: the tile, the room for its highlight and, where it shows, the name under it
+    private fun baseRowHeight() = TILE_H + 2 * ROOM + if (namesBelow()) dp(32) else 0
+
+    // The grid shows whole rows only. The rows that fit are counted from the height the grid got, and share that
+    // height, so the last row ends where the grid ends and no row is cut off, on any screen size.
+    private fun fitRows() {
+        val height = grid.height - grid.paddingTop - grid.paddingBottom
+        if (height <= 0) return
+        val rows = maxOf(1, (height / (baseRowHeight() * MIN_ROW)).toInt())
+        val fitted = height / rows
+        if (fitted != rowHeight) {
+            rowHeight = fitted
+            adapter.notifyDataSetChanged()
         }
     }
 
@@ -750,6 +769,10 @@ class MainActivity : Activity() {
         // the dock fits this many tiles on one screen
         const val MAX_DOCK = 5
         const val COLUMNS = 5
+        const val GRID_BOTTOM = 14
+
+        // a row may be this much of the height it needs, so the rows can share the height of the grid
+        const val MIN_ROW = 0.9f
         const val ANIM_MS = 200L
         const val WEATHER_MS = 30 * 60 * 1000L
         const val FOCUS_SCALE = 1.06f
