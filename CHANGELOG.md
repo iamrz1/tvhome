@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/iamrz1/tvhome/compare/v0.7.0...v0.8.0) (2026-11-27)
+
+
+### Features
+
+* add the glass style, glass wallpapers and all apps fixes ([#25](https://github.com/iamrz1/tvhome/issues/25)) ([00dc4d3](https://github.com/iamrz1/tvhome/commit/00dc4d327197de5d506be156c429285f05bf9a60))
+
 ## [0.7.0](https://github.com/iamrz1/tvhome/compare/v0.6.0...v0.7.0) (2026-11-27)
 
 
