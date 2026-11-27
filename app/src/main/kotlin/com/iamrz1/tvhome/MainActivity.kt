@@ -411,8 +411,8 @@ class MainActivity : Activity() {
         val banner = app.info.activityInfo.loadBanner(packageManager)
         if (banner != null) {
             tile.addView(ImageView(this).apply {
-                setImageDrawable(banner)
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageDrawable(RoundedBanner(banner, dp(14).toFloat()))
+                scaleType = ImageView.ScaleType.FIT_XY
             })
             return
         }
