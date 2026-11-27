@@ -20,16 +20,9 @@ class Wallpaper(val name: String, val light: Boolean, private val angle: Int, va
 
     fun drawable() = Gradient(colors, stops, angle)
 
-    /** Gradient draws the colors along its angle, which [drift] can turn by a few degrees to make the wallpaper move. */
+    /** Gradient draws the colors along its angle. */
     class Gradient(private val colors: IntArray, private val stops: FloatArray, private val angle: Int) : Drawable() {
         private val paint = Paint()
-        private var drift = 0f
-
-        fun drift(degrees: Float) {
-            drift = degrees
-            paint.shader = null
-            invalidateSelf()
-        }
 
         override fun draw(canvas: Canvas) {
             val b = bounds
@@ -43,7 +36,7 @@ class Wallpaper(val name: String, val light: Boolean, private val angle: Int, va
         }
 
         private fun shader(width: Int, height: Int): Shader {
-            val rad = Math.toRadians((angle + drift).toDouble())
+            val rad = Math.toRadians(angle.toDouble())
             val dx = cos(rad).toFloat()
             val dy = sin(rad).toFloat()
             // the line runs through the center and is long enough to reach both corners
@@ -90,6 +83,7 @@ object Wallpapers {
         Wallpaper("Candy", true, 65, "#FFD3DE", "#FFF6BD", "#B7E8FF"),
         Wallpaper("Dawn", true, 65, "#8F7BD6", "#E3A1C4", "#F9D2B8"),
         Wallpaper("Mint", true, 65, "#C8F0DC", "#E8F7C8", "#BFE3F5"),
+        Wallpaper("Prism", false, 35, "#4B2FC9", "#A53BB5", "#FF7F66"),
     )
 
     /** What a fresh install starts with. */

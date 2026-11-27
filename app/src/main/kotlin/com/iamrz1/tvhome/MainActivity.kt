@@ -14,6 +14,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.provider.Settings
@@ -43,7 +45,6 @@ import android.widget.Toast
 import java.util.Collections
 import kotlin.concurrent.thread
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
@@ -71,6 +72,7 @@ class MainActivity : Activity() {
     private val icons = HashMap<String, Drawable>()
     private val tileColors = HashMap<String, IntArray>()
     private var wallpaper: Wallpaper.Gradient? = null
+    private var blurredFor: Wallpaper.Gradient? = null
     private var rowHeight = 0
     private var selectedCell: View? = null
     private var customizeButton: View? = null
@@ -88,6 +90,7 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         setWallpaper()
         setContentView(root)
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> refreshGlass() }
         buildPill()
         buildDock()
         buildAllApps()
@@ -104,13 +107,11 @@ class MainActivity : Activity() {
         rebuildDock()
         ui.removeCallbacks(weatherTick)
         weatherTick.run()
-        driftWallpaper()
     }
 
     override fun onPause() {
         super.onPause()
         ui.removeCallbacks(weatherTick)
-        ui.removeCallbacks(drift)
         endMove()
     }
 
@@ -159,21 +160,19 @@ class MainActivity : Activity() {
 
     private fun setWallpaper() {
         wallpaper = Wallpapers.get(prefs.wallpaper).drawable().also { root.background = it }
+        blurredFor = null
     }
 
-    // The Apple TV style lets the wallpaper drift slowly, by turning its gradient a few degrees back and forth. It moves
-    // in small steps a few times a second, which is smooth enough for something this slow and cheap for a weak device.
-    private val drift = object : Runnable {
-        override fun run() {
-            val t = (System.currentTimeMillis() % DRIFT_MS) / DRIFT_MS.toDouble()
-            wallpaper?.drift((DRIFT_DEGREES * sin(t * 2 * Math.PI)).toFloat())
-            ui.postDelayed(this, DRIFT_STEP_MS)
-        }
-    }
-
-    private fun driftWallpaper() {
-        ui.removeCallbacks(drift)
-        if (apple()) drift.run() else wallpaper?.drift(0f)
+    // The glass layers draw a blurred copy of the wallpaper. It is made again when the wallpaper or the screen changes.
+    private fun refreshGlass() {
+        val wp = wallpaper ?: return
+        if (!glass() || root.width <= 0) return
+        if (blurredFor === wp && GlassBlur.matches(root.width, root.height)) return
+        GlassBlur.update(wp, root.width, root.height)
+        blurredFor = wp
+        pill.invalidate()
+        dockScroll.invalidate()
+        allApps.invalidate()
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -188,28 +187,36 @@ class MainActivity : Activity() {
     // the corner radius of a tile: none for a rectangle, and half the height for a circle, which is as wide as it is high
     private fun tileRadius(height: Int = TILE_H) = when (prefs.iconShape) {
         IconShape.RECTANGLE -> 0f
-        IconShape.ROUNDED -> dp(14).toFloat()
+        IconShape.ROUNDED -> dp(if (glass()) 20 else 14).toFloat()
         IconShape.CIRCLE -> height / 2f
     }
 
     private fun tileWidth(width: Int = TILE_W, height: Int = TILE_H) = if (circle()) height else width
 
-    private fun apple() = prefs.homeStyle == HomeStyle.APPLE_TV
+    private fun glass() = prefs.homeStyle == HomeStyle.GLASS
 
-    // The Apple TV dock has bigger tiles, about five to a screen, so the next one shows at the edge and says there is
-    // more. The size follows the screen, so it looks the same on any of them.
-    private fun dockTileW() = if (apple()) {
-        (resources.displayMetrics.widthPixels / 5.1f).toInt().coerceIn(dp(150), dp(200))
+    // the text and icons on glass are white, whatever the theme
+    private fun ink() = if (glass()) Color.WHITE else palette.label
+
+    private fun inkMuted() = if (glass()) withAlpha(Color.WHITE, 0xEE) else palette.muted
+
+    private fun inkFocus() = if (glass()) Color.WHITE else palette.focus
+
+    // The glass dock holds five tiles and the round all apps button across the screen, so its tiles are sized from the
+    // width that is left. They look the same on any screen.
+    private fun dockTileW() = if (glass()) {
+        val content = resources.displayMetrics.widthPixels - 2 * dp(GLASS_MARGIN) - 2 * dp(GLASS_PAD)
+        ((content - 5 * dockGap()) / (MAX_DOCK + 9 / 16f)).toInt()
     } else {
         TILE_W
     }
 
-    private fun dockTileH() = if (apple()) dockTileW() * 9 / 16 else TILE_H
+    private fun dockTileH() = if (glass()) dockTileW() * 9 / 16 else TILE_H
 
-    // the room around a dock tile is for the highlight, and the Apple TV shadow is a big one
-    private fun dockRoom() = if (apple()) dp(26) else ROOM
+    // the room around a dock tile is for the highlight
+    private fun dockRoom() = if (glass()) dp(22) else ROOM
 
-    private fun dockGap() = if (apple()) dp(30) else GAP
+    private fun dockGap() = if (glass()) dp(18) else GAP
 
     private fun lightFont() = Typeface.create("sans-serif-light", Typeface.NORMAL)
 
@@ -226,46 +233,48 @@ class MainActivity : Activity() {
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
         Corners.square = prefs.iconShape == IconShape.RECTANGLE
-        pill.background = if (apple()) ColorDrawable(Color.TRANSPARENT) else round(palette.pill, 30)
+        refreshGlass()
+        pill.background = pillBackground()
         layoutDock()
-        allApps.setBackgroundColor(palette.overlay)
-        allTitle.setTextColor(palette.label)
-        allTitle.typeface = lightFont()
-        allTitle.textSize = if (apple()) 30f else 24f
+        styleAllApps()
         fillPill()
-        driftWallpaper()
         rebuildDock()
         // new cells, because the grid rows are taller when the focus style shows names
         grid.adapter = adapter
     }
-
-    private fun glowStyle() = prefs.focusStyle == FocusStyle.GLOW
 
     private fun liftStyle() = prefs.focusStyle == FocusStyle.LIFT
 
     private fun focusScale() = if (liftStyle()) LIFT_SCALE else FOCUS_SCALE
 
     // the dock card has a thin edge, so it still reads as a card when it is clear
-    private fun dockBackground(): Drawable = if (apple()) ColorDrawable(Color.TRANSPARENT) else GradientDrawable().apply {
-        setColor(palette.dock)
-        // the dock follows the icons when they are rectangles
-        cornerRadius = Corners.radius(dp(28).toFloat())
-        setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
+    private fun dockBackground(): Drawable = if (glass()) {
+        // the card stops above the band where the name of the focused tile is
+        InsetDrawable(
+            GlassDrawable(dockScroll, { Corners.radius(dp(26).toFloat()) }, Color.argb(0x1A, 44, 22, 110), 0x4D, 0x1A),
+            0, 0, 0, dp(NAME_BAND),
+        )
+    } else {
+        GradientDrawable().apply {
+            setColor(palette.dock)
+            // the dock follows the icons when they are rectangles
+            cornerRadius = Corners.radius(dp(28).toFloat())
+            setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
+        }
     }
 
-    // what a focused top bar button shows: a ring, or a soft radial glow
+    private fun pillBackground(): Drawable =
+        if (glass()) GlassDrawable(pill, { -1f }, Color.argb(0x42, 44, 22, 110), 0x42, 0x0F) else round(palette.pill, 30)
+
+    // what a focused top bar button shows: a white ring, or a soft fill
     private fun pillMark(): Drawable {
         val active = GradientDrawable().apply {
             shape = if (Corners.square) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
             if (liftStyle()) {
-                setColor(withAlpha(palette.focus, 0x33))
-            } else if (glowStyle()) {
-                gradientType = GradientDrawable.RADIAL_GRADIENT
-                gradientRadius = dp(23).toFloat()
-                colors = intArrayOf(withAlpha(Color.WHITE, 0x59), withAlpha(Color.WHITE, 0x00))
+                setColor(withAlpha(if (glass()) Color.WHITE else palette.focus, 0x33))
             } else {
                 setColor(palette.focusFill)
-                setStroke(dp(3), palette.focus)
+                setStroke(dp(3), Color.WHITE)
             }
         }
         return StateListDrawable().apply {
@@ -279,14 +288,12 @@ class MainActivity : Activity() {
     private fun cellBackground(width: Int = TILE_W, height: Int = TILE_H): Drawable {
         val w = tileWidth(width, height)
         val r = tileRadius(height)
-        val mark: Drawable = if (liftStyle() && apple()) {
-            GlowDrawable(withAlpha(Color.BLACK, 0x70), r, dp(14).toFloat(), w, height, dp(9).toFloat())
+        val mark: Drawable = if (liftStyle() && glass()) {
+            GlowDrawable(Color.argb(0x80, 20, 8, 60), r, dp(14).toFloat(), w, height, dp(10).toFloat())
         } else if (liftStyle()) {
             GlowDrawable(withAlpha(Color.BLACK, 0x80), r, dp(8).toFloat(), w, height, dp(3).toFloat())
-        } else if (glowStyle()) {
-            GlowDrawable(withAlpha(Color.WHITE, 0xC0), r, dp(10).toFloat(), w, height)
         } else {
-            ringFrame(palette.focus, 3, w, height)
+            ringFrame(Color.WHITE, 3, w, height)
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_activated), mark)
@@ -302,6 +309,8 @@ class MainActivity : Activity() {
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
         val anim = v.animate().scaleX(s).scaleY(s)
+        // on glass a lifted tile also rises
+        if (glass() && liftStyle()) anim.translationY(if (active) -dp(8).toFloat() else 0f)
         if (active) {
             anim.setDuration(280).setInterpolator(OvershootInterpolator(1.8f))
         } else {
@@ -317,8 +326,31 @@ class MainActivity : Activity() {
         intArrayOf(withAlpha(Color.WHITE, 0x2A), withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x00)),
     ).apply { cornerRadius = tileRadius(height) }
 
+    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring and a
+    // band of light across it. Elsewhere only a lifted tile has the shine in its corner.
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
-        tile?.foreground = if (on && liftStyle()) shine(height) else null
+        tile ?: return
+        if (!glass()) {
+            tile.foreground = if (on && liftStyle()) shine(height) else null
+            return
+        }
+        val radius = if (tile.tag == ROUND) (if (Corners.square) 0f else height / 2f) else tileRadius(height)
+        val layers = ArrayList<Drawable>()
+        layers += GradientDrawable().apply {
+            setStroke(dp(1), withAlpha(Color.WHITE, 0x66))
+            cornerRadius = radius
+        }
+        if (on && liftStyle()) {
+            layers += GradientDrawable().apply {
+                setStroke(dp(2), withAlpha(Color.WHITE, 0xDB))
+                cornerRadius = radius
+            }
+            layers += GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x5C), withAlpha(Color.WHITE, 0x00)),
+            ).apply { cornerRadius = radius }
+        }
+        tile.foreground = LayerDrawable(layers.toTypedArray())
     }
 
     private fun icon(app: AppEntry): Drawable =
@@ -328,8 +360,8 @@ class MainActivity : Activity() {
         pill = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = if (apple()) ColorDrawable(Color.TRANSPARENT) else round(palette.pill, 30)
         }
+        pill.background = pillBackground()
         root.addView(
             pill,
             FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END)
@@ -344,9 +376,9 @@ class MainActivity : Activity() {
         if (PillItem.CLOCK in on) pill.addView(TextClock(this).apply {
             format24Hour = "HH:mm"
             format12Hour = "HH:mm"
-            textSize = if (apple()) 28f else 22f
+            textSize = if (glass()) 28f else 22f
             typeface = lightFont()
-            setTextColor(palette.muted)
+            setTextColor(inkMuted())
             setPadding(dp(14), 0, dp(10), 0)
         })
         weatherBox = null
@@ -367,11 +399,11 @@ class MainActivity : Activity() {
     }
 
     private fun buildWeather(): View {
-        val icon = ImageView(this).apply { setColorFilter(palette.muted) }
+        val icon = ImageView(this).apply { setColorFilter(inkMuted()) }
         val temp = TextView(this).apply {
-            textSize = if (apple()) 24f else 20f
+            textSize = if (glass()) 24f else 20f
             typeface = lightFont()
-            setTextColor(palette.muted)
+            setTextColor(inkMuted())
             setPadding(dp(6), 0, 0, 0)
         }
         weatherIcon = icon
@@ -421,14 +453,14 @@ class MainActivity : Activity() {
 
     private fun pillButton(res: Int, desc: String, onClick: () -> Unit) = ImageView(this).apply {
         setImageResource(res)
-        setColorFilter(palette.muted)
+        setColorFilter(inkMuted())
         contentDescription = desc
         setPadding(dp(10), dp(10), dp(10), dp(10))
         layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(4); marginEnd = dp(4) }
         isFocusable = true
         foreground = pillMark()
         setOnClickListener { onClick() }
-        setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) palette.focus else palette.muted) }
+        setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) inkFocus() else inkMuted()) }
     }
 
     // opens the first action that some app on the device handles
@@ -449,7 +481,6 @@ class MainActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            background = dockBackground()
         }
         dockRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -462,15 +493,19 @@ class MainActivity : Activity() {
         layoutDock()
     }
 
-    // The classic dock is a card at the bottom. The Apple TV dock is a free row, left aligned, that sits higher and
-    // keeps room under it for the name of the focused tile.
+    // Both docks are a card at the bottom. The glass one sits higher, has the round all apps button in its row, and keeps
+    // a band under it for the name of the focused tile.
     private fun layoutDock() {
         dockScroll.background = dockBackground()
+        // A background that has padding of its own, like the inset glass card, changes the padding of the view, and a
+        // background that has none leaves that padding behind. So the padding is always set here.
+        dockScroll.setPadding(0, 0, 0, 0)
         val lp = dockScroll.layoutParams as FrameLayout.LayoutParams
-        if (apple()) {
-            lp.setMargins(0, 0, 0, dp(70))
-            // the end padding keeps the scaled highlight of the first and last cell inside the row
-            dockRow.setPadding(dp(45), dp(8), dp(45), dp(44))
+        if (glass()) {
+            lp.setMargins(dp(GLASS_MARGIN), 0, dp(GLASS_MARGIN), dp(70))
+            // the first cell has half a gap of margin, which is part of the space to the edge of the card
+            val side = dp(GLASS_PAD) - dockGap() / 2
+            dockRow.setPadding(side, dp(8), side, dp(8 + NAME_BAND))
         } else {
             lp.setMargins(dp(20), 0, dp(20), dp(32))
             dockRow.setPadding(dp(20), dp(8), dp(20), dp(8))
@@ -494,7 +529,7 @@ class MainActivity : Activity() {
         val byPkg = apps.associateBy { it.pkg }
         dockRow.removeAllViews()
         for (pkg in visibleDock()) byPkg[pkg]?.let { dockRow.addView(dockCell(it)) }
-        if (apple()) dockRow.addView(allAppsCell())
+        if (glass()) dockRow.addView(allAppsCell())
         if (dockRow.childCount == 0) dockRow.addView(TextView(this).apply {
             text = "Press Down for all apps"
             setTextColor(palette.muted)
@@ -551,7 +586,7 @@ class MainActivity : Activity() {
 
     private fun bindTile(tile: FrameLayout, app: AppEntry, height: Int = TILE_H) {
         tile.removeAllViews()
-        val gradient = apple() && !circle()
+        val gradient = glass() && !circle()
         tile.background = if (gradient) {
             GradientDrawable(GradientDrawable.Orientation.TL_BR, iconGradient(app)).apply { cornerRadius = tileRadius(height) }
         } else {
@@ -574,12 +609,12 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 // the Apple TV style shows the name of the focused tile only, so the icon can be bigger
-                val size = if (apple()) minOf(dp(56), height * 3 / 5) else dp(44)
+                val size = if (glass()) minOf(dp(56), height * 3 / 5) else dp(44)
                 addView(ImageView(context).apply {
                     setImageDrawable(icon(app))
                     layoutParams = LinearLayout.LayoutParams(size, size)
                 })
-                if (!apple()) addView(TextView(context).apply {
+                if (!glass()) addView(TextView(context).apply {
                     text = app.label
                     textSize = 14f
                     setTextColor(palette.label)
@@ -606,70 +641,64 @@ class MainActivity : Activity() {
             setOnLongClickListener { showAppMenu(app, it); true }
             setOnFocusChangeListener { _, f -> dockFocused(cell, this, name, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale()) }
         }
-        // the tile is the first child of the cell. The Apple TV style fades the name in under the focused tile.
+        // the tile is the first child of the cell. The glass style fades the name in under the card.
         cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
-        if (apple()) name = nameUnder(cell, app.label)
+        showShine(tile, false, h)
+        if (glass()) name = nameUnder(cell, app.label)
         return cell
     }
 
-    // the Apple TV dock ends with a tile that opens all apps
+    // the glass dock ends with a round button that opens all apps
     private fun allAppsCell(): View {
         val h = dockTileH()
-        val cell = dockFrame()
+        val cell = dockFrame(h)
         val tile = newTile().apply {
-            background = GradientDrawable().apply {
-                setColor(withAlpha(if (palette.dark) Color.WHITE else Color.WHITE, if (palette.dark) 0x29 else 0x57))
-                setStroke(dp(1), withAlpha(Color.WHITE, 0x8C))
-                cornerRadius = tileRadius(h)
-            }
-            addView(
-                LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    addView(ImageView(context).apply {
-                        setImageResource(R.drawable.ic_apps)
-                        setColorFilter(palette.label)
-                    }, LinearLayout.LayoutParams(dp(40), dp(40)))
-                    addView(TextView(context).apply {
-                        text = "All apps"
-                        textSize = 15f
-                        typeface = mediumFont()
-                        setTextColor(palette.label)
-                        gravity = Gravity.CENTER
-                        setPadding(0, dp(4), 0, 0)
-                    })
-                },
-                FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT),
-            )
+            tag = ROUND
+            background = GlassDrawable(this, { if (Corners.square) 0f else -1f }, Color.argb(0x14, 255, 255, 255), 0x57, 0x1F)
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_apps)
+                setColorFilter(Color.WHITE)
+                setPadding(h / 4, h / 4, h / 4, h / 4)
+            }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             contentDescription = "All apps"
             isFocusable = true
             setOnClickListener { showAllApps() }
             setOnFocusChangeListener { _, f -> dockFocused(cell, this, null, f, focusScale()) }
         }
-        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
+        cell.addView(tile, FrameLayout.LayoutParams(h, h, Gravity.CENTER))
+        showShine(tile, false, h)
         return cell
     }
 
-    private fun dockFrame() = FrameLayout(this).apply {
+    private fun dockFrame(width: Int = dockTileW()) = FrameLayout(this).apply {
         val room = dockRoom()
-        layoutParams = LinearLayout.LayoutParams(dockTileW() + 2 * room, dockTileH() + 2 * room)
+        layoutParams = LinearLayout.LayoutParams(width + 2 * room, dockTileH() + 2 * room)
             .apply { setMargins(dockGap() / 2 - room, 0, dockGap() / 2 - room, 0) }
         clipChildren = false
-        background = cellBackground(dockTileW(), dockTileH())
+        background = cellBackground(width, dockTileH())
     }
 
-    // the name hangs below the cell, in the room that the row keeps for it
+    // the name hangs below the card, in a glass capsule in the band that the row keeps for it
     private fun nameUnder(cell: FrameLayout, label: String) = TextView(this).apply {
         text = label
-        textSize = 20f
+        textSize = 17f
         typeface = mediumFont()
-        setTextColor(palette.label)
+        setTextColor(Color.WHITE)
         gravity = Gravity.CENTER
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
+        setPadding(dp(18), 0, dp(18), 0)
+        background = capsule(this)
         alpha = 0f
-        cell.addView(this, FrameLayout.LayoutParams(MATCH_PARENT, dp(28), Gravity.BOTTOM).apply { bottomMargin = -dp(18) })
+        // the card ends a little under the cell, and the capsule starts a little under the card
+        cell.addView(
+            this,
+            FrameLayout.LayoutParams(WRAP_CONTENT, dp(28), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+                .apply { bottomMargin = -dp(42) },
+        )
     }
+
+    private fun capsule(view: View) = GlassDrawable(view, { -1f }, Color.argb(0x38, 44, 22, 110), 0x4D, 0x1A)
 
     private fun dockFocused(cell: View, tile: View, name: View?, focused: Boolean, factor: Float) {
         cell.isActivated = focused
@@ -786,9 +815,8 @@ class MainActivity : Activity() {
         }
         allTitle = TextView(this).apply {
             text = "All apps"
-            textSize = if (apple()) 30f else 24f
+            textSize = if (glass()) 30f else 24f
             typeface = lightFont()
-            setTextColor(palette.label)
             setPadding(dp(GRID_SIDE), 0, 0, dp(16 - GRID_EDGE))
         }
         allApps = LinearLayout(this).apply {
@@ -797,13 +825,35 @@ class MainActivity : Activity() {
             // selected cell needs for its scale. So this layout clips neither its padding nor its child.
             clipChildren = true
             clipToPadding = false
-            setBackgroundColor(palette.overlay)
-            setPadding(dp(32 - GRID_SIDE), dp(40), dp(32 - GRID_SIDE), dp(24 - GRID_EDGE))
             visibility = View.GONE
             addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         }
         root.addView(allApps, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        styleAllApps()
+    }
+
+    // Glass: a dim, blurred wallpaper over the home screen with a sheet of glass on it. Classic: a plain wash.
+    private fun styleAllApps() {
+        allTitle.setTextColor(ink())
+        allTitle.textSize = if (glass()) 30f else 24f
+        if (glass()) {
+            allApps.background = LayerDrawable(
+                arrayOf(
+                    GlassDrawable(allApps, { 0f }, Color.argb(0x57, 24, 10, 64), dim = true),
+                    InsetDrawable(
+                        GlassDrawable(allApps, { Corners.radius(dp(24).toFloat()) }, Color.argb(0x33, 44, 22, 110), 0x42, 0x14),
+                        dp(SHEET_SIDE), dp(SHEET_EDGE), dp(SHEET_SIDE), dp(SHEET_EDGE),
+                    ),
+                ),
+            )
+            allApps.setPadding(
+                dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 24), dp(SHEET_SIDE + 24 - GRID_SIDE), dp(SHEET_EDGE + 14 - GRID_EDGE),
+            )
+        } else {
+            allApps.setBackgroundColor(palette.overlay)
+            allApps.setPadding(dp(32 - GRID_SIDE), dp(40), dp(32 - GRID_SIDE), dp(24 - GRID_EDGE))
+        }
     }
 
     private fun showAllApps() {
@@ -924,15 +974,25 @@ class MainActivity : Activity() {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                     visibility = View.INVISIBLE
-                }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) })
+                    if (glass()) {
+                        // a glass capsule under the tile
+                        setPadding(dp(18), 0, dp(18), 0)
+                        background = capsule(this)
+                    }
+                }, if (glass()) {
+                    FrameLayout.LayoutParams(WRAP_CONTENT, dp(26), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(6) }
+                } else {
+                    FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) }
+                })
             }
             cell.getChildAt(0).layoutParams = FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER)
             cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, if (rowHeight > 0) rowHeight else baseRowHeight())
             cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
+            showShine(tileOf(cell), false)
             (cell.getChildAt(1) as TextView).apply {
                 text = apps[position].label
-                setTextColor(palette.label)
+                setTextColor(ink())
                 visibility = if (nameShown(cell.isSelected)) View.VISIBLE else View.INVISIBLE
             }
             return cell
@@ -971,15 +1031,19 @@ class MainActivity : Activity() {
         const val MAX_DOCK = 5
         const val COLUMNS = 5
         const val GRID_SIDE = 20
+        const val GLASS_MARGIN = 24
+        const val GLASS_PAD = 26
+        // the band under the glass dock for the name of the focused tile
+        const val NAME_BAND = 40
+        const val SHEET_SIDE = 28
+        const val SHEET_EDGE = 22
+        const val ROUND = "round"
         const val GRID_EDGE = 12
 
         // a row may be this much of the height it needs, so the rows can share the height of the grid
         const val MIN_ROW = 0.9f
         const val ANIM_MS = 200L
         const val WEATHER_MS = 30 * 60 * 1000L
-        const val DRIFT_MS = 120_000L
-        const val DRIFT_STEP_MS = 400L
-        const val DRIFT_DEGREES = 12.0
         const val FOCUS_SCALE = 1.06f
         const val LIFT_SCALE = 1.15f
         const val MOVE_SCALE = 1.15f
