@@ -384,8 +384,10 @@ class MainActivity : Activity() {
     private fun buildPill() {
         pill = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
-            // a focused button is scaled up, and must not be cut off at the edge of the bar
+            // A focused button is scaled up. The bar clips its buttons to its children area and to its padding, and both cut the
+            // circle of the focus flat at the top and the bottom.
             clipChildren = false
+            clipToPadding = false
             setPadding(dp(8), dp(6), dp(8), dp(6))
         }
         pill.background = pillBackground()
