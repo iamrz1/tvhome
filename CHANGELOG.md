@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/iamrz1/tvhome/compare/v0.6.0...v0.7.0) (2026-11-27)
+
+
+### Features
+
+* add an icon shape setting and fit the all apps rows ([#23](https://github.com/iamrz1/tvhome/issues/23)) ([5dde684](https://github.com/iamrz1/tvhome/commit/5dde68456aeb41e3e75ef60bdf748975916c967b))
+
 ## [0.6.0](https://github.com/iamrz1/tvhome/compare/v0.5.0...v0.6.0) (2026-11-23)
 
 
