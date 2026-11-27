@@ -67,6 +67,7 @@ class MainActivity : Activity() {
 
     private val adapter = AppsAdapter()
     private val icons = HashMap<String, Drawable>()
+    private var rowHeight = 0
     private var selectedCell: View? = null
     private var customizeButton: View? = null
     private var apps: List<AppEntry> = emptyList()
@@ -79,6 +80,7 @@ class MainActivity : Activity() {
         prefs = Prefs(this)
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
+        Corners.square = prefs.iconShape == IconShape.RECTANGLE
         root = FrameLayout(this)
         root.background = Wallpapers.get(prefs.wallpaper).drawable()
         setContentView(root)
@@ -152,14 +154,31 @@ class MainActivity : Activity() {
 
     private fun round(color: Int, radiusDp: Int) = GradientDrawable().apply {
         setColor(color)
-        cornerRadius = dp(radiusDp).toFloat()
+        cornerRadius = Corners.radius(dp(radiusDp).toFloat())
     }
+
+    private fun circle() = prefs.iconShape == IconShape.CIRCLE
+
+    // the corner radius of a tile: none for a rectangle, and half the height for a circle, which is as wide as it is high
+    private fun tileRadius() = when (prefs.iconShape) {
+        IconShape.RECTANGLE -> 0f
+        IconShape.ROUNDED -> dp(14).toFloat()
+        IconShape.CIRCLE -> TILE_H / 2f
+    }
+
+    private fun tileWidth() = if (circle()) TILE_H else TILE_W
+
+    // a circle shows the name under it all the time, and the lift style shows the name of the selected tile
+    private fun namesBelow() = circle() || liftStyle()
+
+    private fun nameShown(selected: Boolean) = circle() || (liftStyle() && selected)
 
     private fun withAlpha(color: Int, alpha: Int) = (color and 0x00FFFFFF) or (alpha shl 24)
 
     private fun applyTheme() {
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
+        Corners.square = prefs.iconShape == IconShape.RECTANGLE
         pill.background = round(palette.pill, 30)
         dockScroll.background = dockBackground()
         allApps.setBackgroundColor(palette.overlay)
@@ -179,14 +198,15 @@ class MainActivity : Activity() {
     // the dock card has a thin edge, so it still reads as a card when it is clear
     private fun dockBackground() = GradientDrawable().apply {
         setColor(palette.dock)
-        cornerRadius = dp(28).toFloat()
+        // the dock follows the icons when they are rectangles
+        cornerRadius = Corners.radius(dp(28).toFloat())
         setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
     }
 
     // what a focused top bar button shows: a ring, or a soft radial glow
     private fun pillMark(): Drawable {
         val active = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
+            shape = if (Corners.square) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
             if (liftStyle()) {
                 setColor(withAlpha(palette.focus, 0x33))
             } else if (glowStyle()) {
@@ -208,9 +228,9 @@ class MainActivity : Activity() {
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
     private fun cellBackground(): Drawable {
         val mark: Drawable = if (liftStyle()) {
-            GlowDrawable(withAlpha(Color.BLACK, 0x80), dp(14).toFloat(), dp(8).toFloat(), TILE_W, TILE_H, dp(3).toFloat())
+            GlowDrawable(withAlpha(Color.BLACK, 0x80), tileRadius(), dp(8).toFloat(), tileWidth(), TILE_H, dp(3).toFloat())
         } else if (glowStyle()) {
-            GlowDrawable(withAlpha(Color.WHITE, 0xC0), dp(14).toFloat(), dp(10).toFloat(), TILE_W, TILE_H)
+            GlowDrawable(withAlpha(Color.WHITE, 0xC0), tileRadius(), dp(10).toFloat(), tileWidth(), TILE_H)
         } else {
             ringFrame(palette.focus, 3)
         }
@@ -222,7 +242,7 @@ class MainActivity : Activity() {
     }
 
     private fun ringFrame(color: Int, strokeDp: Int) =
-        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), dp(14).toFloat(), TILE_W, TILE_H)
+        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), tileRadius(), tileWidth(), TILE_H)
 
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
@@ -407,12 +427,16 @@ class MainActivity : Activity() {
 
     private fun bindTile(tile: FrameLayout, app: AppEntry) {
         tile.removeAllViews()
-        tile.background = round(palette.tile, 14)
-        val banner = app.info.activityInfo.loadBanner(packageManager)
-        if (banner != null) {
+        tile.background = GradientDrawable().apply {
+            setColor(palette.tile)
+            cornerRadius = tileRadius()
+        }
+        // a circle shows the app icon, because a wide banner does not fit in it
+        val art = if (circle()) app.info.loadIcon(packageManager) else app.info.activityInfo.loadBanner(packageManager)
+        if (art != null) {
             tile.addView(ImageView(this).apply {
-                setImageDrawable(banner)
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageDrawable(RoundedBanner(art, tileRadius(), fillCorners = !circle()))
+                scaleType = ImageView.ScaleType.FIT_XY
             })
             return
         }
@@ -457,7 +481,7 @@ class MainActivity : Activity() {
                 scaleTo(cell, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale())
             }
         }
-        cell.addView(tile, FrameLayout.LayoutParams(TILE_W, TILE_H, Gravity.CENTER))
+        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER))
         return cell
     }
 
@@ -545,11 +569,13 @@ class MainActivity : Activity() {
         grid = GridView(this).apply {
             numColumns = COLUMNS
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            verticalSpacing = dp(4)
             selector = ColorDrawable(Color.TRANSPARENT)
             clipChildren = false
             clipToPadding = false
+            // the scaled name under a selected tile of the last row hangs below the row, and the grid clips at its edge
+            setPadding(0, 0, 0, dp(GRID_BOTTOM))
             adapter = this@MainActivity.adapter
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitRows() }
             setOnItemClickListener { _, _, pos, _ -> Apps.launch(this@MainActivity, apps[pos]) }
             setOnItemLongClickListener { _, view, pos, _ -> showAppMenu(apps[pos], view); true }
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -575,7 +601,7 @@ class MainActivity : Activity() {
             // a selected cell is scaled up, so the grid must be free to draw outside its own bounds
             clipChildren = false
             setBackgroundColor(palette.overlay)
-            setPadding(dp(32), dp(40), dp(32), dp(24))
+            setPadding(dp(32), dp(40), dp(32), dp(24 - GRID_BOTTOM))
             visibility = View.GONE
             addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
@@ -699,20 +725,37 @@ class MainActivity : Activity() {
                     visibility = View.INVISIBLE
                 }, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = dp(4) })
             }
-            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, TILE_H + 2 * ROOM + if (liftStyle()) dp(32) else 0)
+            cell.getChildAt(0).layoutParams = FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER)
+            cell.layoutParams = AbsListView.LayoutParams(MATCH_PARENT, if (rowHeight > 0) rowHeight else baseRowHeight())
             cell.background = cellBackground()
             bindTile(cell.getChildAt(0) as FrameLayout, apps[position])
             (cell.getChildAt(1) as TextView).apply {
                 text = apps[position].label
                 setTextColor(palette.label)
-                visibility = if (liftStyle() && cell.isSelected) View.VISIBLE else View.INVISIBLE
+                visibility = if (nameShown(cell.isSelected)) View.VISIBLE else View.INVISIBLE
             }
             return cell
         }
     }
 
+    // the height a row needs: the tile, the room for its highlight and, where it shows, the name under it
+    private fun baseRowHeight() = TILE_H + 2 * ROOM + if (namesBelow()) dp(32) else 0
+
+    // The grid shows whole rows only. The rows that fit are counted from the height the grid got, and share that
+    // height, so the last row ends where the grid ends and no row is cut off, on any screen size.
+    private fun fitRows() {
+        val height = grid.height - grid.paddingTop - grid.paddingBottom
+        if (height <= 0) return
+        val rows = maxOf(1, (height / (baseRowHeight() * MIN_ROW)).toInt())
+        val fitted = height / rows
+        if (fitted != rowHeight) {
+            rowHeight = fitted
+            adapter.notifyDataSetChanged()
+        }
+    }
+
     private fun showName(cell: View, on: Boolean) {
-        (cell as? FrameLayout)?.getChildAt(1)?.visibility = if (on && liftStyle()) View.VISIBLE else View.INVISIBLE
+        (cell as? FrameLayout)?.getChildAt(1)?.visibility = if (nameShown(on)) View.VISIBLE else View.INVISIBLE
     }
 
     // five tiles and four gaps fit the dock, and ROOM around a tile is what the highlight can use
@@ -726,6 +769,10 @@ class MainActivity : Activity() {
         // the dock fits this many tiles on one screen
         const val MAX_DOCK = 5
         const val COLUMNS = 5
+        const val GRID_BOTTOM = 14
+
+        // a row may be this much of the height it needs, so the rows can share the height of the grid
+        const val MIN_ROW = 0.9f
         const val ANIM_MS = 200L
         const val WEATHER_MS = 30 * 60 * 1000L
         const val FOCUS_SCALE = 1.06f

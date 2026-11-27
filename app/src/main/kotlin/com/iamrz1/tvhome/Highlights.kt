@@ -85,12 +85,8 @@ class RingDrawable(
         val grow = gap + stroke / 2
         val left = b.exactCenterX() - tileW / 2f - grow
         val top = b.exactCenterY() - tileH / 2f - grow
-        canvas.drawRoundRect(
-            RectF(left, top, left + tileW + 2 * grow, top + tileH + 2 * grow),
-            radius + grow,
-            radius + grow,
-            paint,
-        )
+        val r = if (radius > 0f) radius + grow else 0f
+        canvas.drawRoundRect(RectF(left, top, left + tileW + 2 * grow, top + tileH + 2 * grow), r, r, paint)
     }
 
     override fun setAlpha(alpha: Int) {

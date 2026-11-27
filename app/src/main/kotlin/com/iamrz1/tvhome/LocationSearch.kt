@@ -50,7 +50,7 @@ class LocationSearch(
             setPadding(px(24), px(20), px(24), px(20))
             background = GradientDrawable().apply {
                 setColor(palette.option)
-                cornerRadius = px(14).toFloat()
+                cornerRadius = Corners.radius(px(14).toFloat())
             }
             addView(TextView(activity).apply {
                 text = "Search for a place"
