@@ -953,7 +953,12 @@ class MainActivity : Activity() {
             val bitmap = Bitmap.createBitmap((root.width * scale).toInt(), (root.height * scale).toInt(), Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             canvas.scale(scale, scale)
+            // The wallpaper view is a hardware layer, which a picture drawn with this canvas keeps showing as it was. So the
+            // wallpaper is drawn here, from the drawable, and the view is left out.
+            wallpaperView.alpha = 0f
+            wallpaper?.draw(canvas)
             root.draw(canvas)
+            wallpaperView.alpha = 1f
             return bitmap
         }
 
