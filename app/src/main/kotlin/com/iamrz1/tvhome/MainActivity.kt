@@ -473,8 +473,7 @@ class MainActivity : Activity() {
             dockRow.setPadding(dp(45), dp(8), dp(45), dp(44))
         } else {
             lp.setMargins(dp(20), 0, dp(20), dp(32))
-            // the room under the tiles is for the name of the focused one
-            dockRow.setPadding(dp(20), dp(8), dp(20), dp(32))
+            dockRow.setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         dockScroll.layoutParams = lp
     }
@@ -607,9 +606,9 @@ class MainActivity : Activity() {
             setOnLongClickListener { showAppMenu(app, it); true }
             setOnFocusChangeListener { _, f -> dockFocused(cell, this, name, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale()) }
         }
-        // the tile is the first child of the cell. The name fades in under the focused tile.
+        // the tile is the first child of the cell. The Apple TV style fades the name in under the focused tile.
         cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
-        name = nameUnder(cell, app.label)
+        if (apple()) name = nameUnder(cell, app.label)
         return cell
     }
 
