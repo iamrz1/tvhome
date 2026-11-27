@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/iamrz1/tvhome/compare/v0.8.0...v0.8.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* show the chosen wallpaper in the settings preview and smooth the tile edges ([#27](https://github.com/iamrz1/tvhome/issues/27)) ([97166b9](https://github.com/iamrz1/tvhome/commit/97166b9de6f0cadabdf1af5d27e659b0b2fb492f))
+
 ## [0.8.0](https://github.com/iamrz1/tvhome/compare/v0.7.0...v0.8.0) (2026-11-27)
 
 
