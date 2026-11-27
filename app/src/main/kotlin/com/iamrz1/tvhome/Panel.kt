@@ -85,7 +85,7 @@ object Panel {
             setPadding(0, px(8), 0, px(8))
             background = GradientDrawable().apply {
                 setColor(colors.background)
-                cornerRadius = px(6).toFloat()
+                cornerRadius = Corners.radius(px(6).toFloat())
             }
             clipToOutline = true
             outlineProvider = ViewOutlineProvider.BACKGROUND

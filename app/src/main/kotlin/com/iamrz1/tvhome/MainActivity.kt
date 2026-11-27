@@ -79,6 +79,7 @@ class MainActivity : Activity() {
         prefs = Prefs(this)
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
+        Corners.square = prefs.iconShape == IconShape.RECTANGLE
         root = FrameLayout(this)
         root.background = Wallpapers.get(prefs.wallpaper).drawable()
         setContentView(root)
@@ -152,7 +153,7 @@ class MainActivity : Activity() {
 
     private fun round(color: Int, radiusDp: Int) = GradientDrawable().apply {
         setColor(color)
-        cornerRadius = dp(radiusDp).toFloat()
+        cornerRadius = Corners.radius(dp(radiusDp).toFloat())
     }
 
     private fun circle() = prefs.iconShape == IconShape.CIRCLE
@@ -176,6 +177,7 @@ class MainActivity : Activity() {
     private fun applyTheme() {
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
+        Corners.square = prefs.iconShape == IconShape.RECTANGLE
         pill.background = round(palette.pill, 30)
         dockScroll.background = dockBackground()
         allApps.setBackgroundColor(palette.overlay)
@@ -196,14 +198,14 @@ class MainActivity : Activity() {
     private fun dockBackground() = GradientDrawable().apply {
         setColor(palette.dock)
         // the dock follows the icons when they are rectangles
-        cornerRadius = if (prefs.iconShape == IconShape.RECTANGLE) 0f else dp(28).toFloat()
+        cornerRadius = Corners.radius(dp(28).toFloat())
         setStroke(dp(1), withAlpha(Color.WHITE, if (palette.dark) 0x26 else 0x99))
     }
 
     // what a focused top bar button shows: a ring, or a soft radial glow
     private fun pillMark(): Drawable {
         val active = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
+            shape = if (Corners.square) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
             if (liftStyle()) {
                 setColor(withAlpha(palette.focus, 0x33))
             } else if (glowStyle()) {
@@ -432,7 +434,7 @@ class MainActivity : Activity() {
         val art = if (circle()) app.info.loadIcon(packageManager) else app.info.activityInfo.loadBanner(packageManager)
         if (art != null) {
             tile.addView(ImageView(this).apply {
-                setImageDrawable(RoundedBanner(art, tileRadius()))
+                setImageDrawable(RoundedBanner(art, tileRadius(), fillCorners = !circle()))
                 scaleType = ImageView.ScaleType.FIT_XY
             })
             return

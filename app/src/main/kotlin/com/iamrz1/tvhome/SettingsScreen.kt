@@ -166,7 +166,7 @@ class SettingsScreen(
 
     private fun rounded(radiusDp: Int) = object : ViewOutlineProvider() {
         override fun getOutline(v: View, outline: Outline) {
-            outline.setRoundRect(0, 0, v.width, v.height, dp(radiusDp).toFloat())
+            outline.setRoundRect(0, 0, v.width, v.height, Corners.radius(dp(radiusDp).toFloat()))
         }
     }
 
@@ -280,6 +280,7 @@ class SettingsScreen(
 
     private fun render() {
         val p = host.palette
+        preview.invalidateOutline()
         view.setBackgroundColor(p.settingsBg)
         title.setTextColor(p.optionText)
         title.text = page?.label ?: "Settings"
@@ -400,13 +401,16 @@ class SettingsScreen(
                 label.setTextColor(fg)
                 icon?.setColorFilter(fg)
             }
-            check.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(fg) }
+            check.background = GradientDrawable().apply {
+                shape = if (Corners.square) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
+                setColor(fg)
+            }
             check.setColorFilter(bg)
             // a swatch shows its focus as a frame, since its color is the artwork
             cell.foreground = if (swatch != null && focused) GradientDrawable().apply {
                 setColor(Color.TRANSPARENT)
                 setStroke(dp(6), p.optionFocus)
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = Corners.radius(dp(14).toFloat())
             } else null
             cell.animate().scaleX(if (focused) 1.06f else 1f).scaleY(if (focused) 1.06f else 1f).setDuration(120).start()
         }

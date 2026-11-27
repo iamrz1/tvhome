@@ -7,7 +7,7 @@ A small Android TV home launcher. It has a wallpaper gradient, which the all app
 Select the sliders icon in the top bar. The settings screen shows a picture of the home screen, which follows every change, and these categories:
 
 - **Wallpaper**: light and dark gradients.
-- **Look**: the theme (Auto, Dark or Light), the icon shape (Rectangle, Rounded corners or Circular) and the focus highlight (Line, Glow or Lift). The theme only changes the layers over the wallpaper. The shape is enforced on every tile, banners included, and the dock card has square corners with Rectangle. Circular shows the app icon instead of the banner, with the name under it. Lift scales the tile up with a shadow, and all apps shows the app name under it.
+- **Look**: the theme (Auto, Dark or Light), the icon shape (Rectangle, Rounded corners or Circular) and the focus highlight (Line, Glow or Lift). The theme only changes the layers over the wallpaper. The shape is enforced on every tile, banners included, and with Rectangle the dock, the top bar, the menus and the settings tiles have square corners too. A banner that has rounded corners of its own gets them filled with its edge colors, so they do not show on a square tile. Circular shows the app icon instead of the banner, with the name under it. Lift scales the tile up with a shadow, and all apps shows the app name under it.
 - **Dock**: how opaque the dock is, and a reset of its apps.
 - **Top bar**: which icons to show (HDMI starts off, and only shows on the projector), and the weather. Search for a place by name, because that needs no location permission. The weather comes from Open-Meteo and refreshes every 30 minutes.
 - **System**: opens the Android settings.
