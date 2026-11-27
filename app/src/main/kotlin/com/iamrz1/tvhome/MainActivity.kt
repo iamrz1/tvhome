@@ -677,7 +677,7 @@ class MainActivity : Activity() {
         val cell = dockFrame(h)
         val tile = newTile().apply {
             tag = ROUND
-            background = GlassDrawable(this, { if (Corners.square) 0f else -1f }, Color.argb(0x14, 255, 255, 255), 0x57, 0x1F)
+            background = GlassDrawable(this, { if (Corners.square) 0f else -1f }, Color.argb(0x14, 255, 255, 255), 0x57, 0x1F, bake = false)
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_apps)
                 setColorFilter(Color.WHITE)
@@ -721,7 +721,8 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun capsule(view: View) = GlassDrawable(view, { -1f }, Color.argb(0x38, 44, 22, 110), 0x4D, 0x1A)
+    // a capsule sits in a cell that is scaled up, so it is drawn as shapes, which stay sharp, and not as a bitmap, which does not
+    private fun capsule(view: View) = GlassDrawable(view, { -1f }, Color.argb(0x38, 44, 22, 110), 0x4D, 0x1A, bake = false)
 
     private fun dockFocused(cell: View, tile: View, name: View?, focused: Boolean, factor: Float) {
         cell.isActivated = focused

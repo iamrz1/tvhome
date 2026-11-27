@@ -112,10 +112,11 @@ class GlassDrawable(
 ) : Drawable() {
     private val density = anchor.resources.displayMetrics.density
     // glass over colour makes the colour stronger, as the blurred glass of the design does
-    private val blurPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val blurPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(if (dim) 1.5f else 1.9f) })
     }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val smooth = Paint(Paint.FILTER_BITMAP_FLAG)
     private val light = Paint(Paint.ANTI_ALIAS_FLAG)
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val top = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -150,7 +151,7 @@ class GlassDrawable(
             baked = bmp
             bakedKey = key
         }
-        canvas.drawBitmap(bmp, b.left.toFloat(), b.top.toFloat(), null)
+        canvas.drawBitmap(bmp, b.left.toFloat(), b.top.toFloat(), smooth)
     }
 
     private fun paint(canvas: Canvas, b: android.graphics.Rect) {
