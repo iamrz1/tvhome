@@ -348,8 +348,8 @@ class MainActivity : Activity() {
         intArrayOf(withAlpha(Color.WHITE, 0x2A), withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x00)),
     ).apply { cornerRadius = tileRadius(height) }
 
-    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring and a
-    // band of light across it. Elsewhere only a lifted tile has the shine in its corner.
+    // What a tile draws over its artwork. On glass every tile has a thin light edge, and a lifted one a white ring, and
+    // nothing over the artwork, which a band of light washed out. Elsewhere a lifted tile has a shine in its corner.
     private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
         tile ?: return
         if (!glass()) {
@@ -367,10 +367,6 @@ class MainActivity : Activity() {
                 setStroke(dp(2), withAlpha(Color.WHITE, 0xDB))
                 cornerRadius = radius
             }
-            layers += GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                intArrayOf(withAlpha(Color.WHITE, 0x00), withAlpha(Color.WHITE, 0x5C), withAlpha(Color.WHITE, 0x00)),
-            ).apply { cornerRadius = radius }
         }
         tile.foreground = LayerDrawable(layers.toTypedArray())
     }
