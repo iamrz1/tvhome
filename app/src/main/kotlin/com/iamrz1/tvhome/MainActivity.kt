@@ -489,7 +489,8 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
         setOnFocusChangeListener { v, f ->
             (v as ImageView).setColorFilter(if (f) inkFocus() else inkMuted())
-            scaleTo(v, f)
+            // the spring only. A tile in the dock rises as well, but a button must stay inside the bar, which cut it off
+            Motion.focus(v, f, focusScale())
         }
     }
 
