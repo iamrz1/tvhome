@@ -258,7 +258,7 @@ class MainActivity : Activity() {
     private fun dockBackground(): Drawable = if (glass()) {
         // the card stops above the band where the name of the focused tile is
         InsetDrawable(
-            GlassDrawable(dockScroll, { Corners.radius(dp(26).toFloat()) }, Color.argb(0x1A, 44, 22, 110), 0x4D, 0x1A),
+            GlassDrawable(dockScroll, { Corners.radius(dp(26).toFloat()) }, look(Pane.DOCK).tint, look(Pane.DOCK).top, look(Pane.DOCK).bottom),
             0, 0, 0, dp(NAME_BAND),
         )
     } else {
@@ -270,8 +270,36 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun pillBackground(): Drawable =
-        if (glass()) GlassDrawable(pill, { -1f }, Color.argb(0x42, 44, 22, 110), 0x42, 0x0F) else round(palette.pill, 30)
+    // The panes of glass. On the light theme they are frosted and tinted with violet, as in the design. On the dark theme
+    // they are smoked, which is a dark tint with less light on top.
+    private enum class Pane { PILL, DOCK, SHEET, DIM, CAPSULE, BUTTON }
+
+    private class Look(val tint: Int, val top: Int, val bottom: Int)
+
+    private fun look(pane: Pane): Look = if (palette.dark) {
+        when (pane) {
+            Pane.PILL -> Look(Color.argb(0x99, 8, 6, 24), 0x26, 0x08)
+            Pane.DOCK -> Look(Color.argb(0x73, 8, 6, 24), 0x2E, 0x0C)
+            Pane.SHEET -> Look(Color.argb(0x8C, 8, 6, 24), 0x28, 0x0A)
+            Pane.DIM -> Look(Color.argb(0xA6, 4, 3, 14), 0, 0)
+            Pane.CAPSULE -> Look(Color.argb(0xA6, 8, 6, 24), 0x2E, 0x0C)
+            Pane.BUTTON -> Look(Color.argb(0x59, 8, 6, 24), 0x38, 0x12)
+        }
+    } else {
+        when (pane) {
+            Pane.PILL -> Look(Color.argb(0x42, 44, 22, 110), 0x42, 0x0F)
+            Pane.DOCK -> Look(Color.argb(0x1A, 44, 22, 110), 0x4D, 0x1A)
+            Pane.SHEET -> Look(Color.argb(0x33, 44, 22, 110), 0x42, 0x14)
+            Pane.DIM -> Look(Color.argb(0x57, 24, 10, 64), 0, 0)
+            Pane.CAPSULE -> Look(Color.argb(0x38, 44, 22, 110), 0x4D, 0x1A)
+            Pane.BUTTON -> Look(Color.argb(0x14, 255, 255, 255), 0x57, 0x1F)
+        }
+    }
+
+    private fun pillBackground(): Drawable {
+        val l = look(Pane.PILL)
+        return if (glass()) GlassDrawable(pill, { -1f }, l.tint, l.top, l.bottom) else round(palette.pill, 30)
+    }
 
     // what a focused top bar button shows: a white ring, or a soft fill
     private fun pillMark(): Drawable {
@@ -329,16 +357,10 @@ class MainActivity : Activity() {
 
     // a focused tile springs up past its size and settles
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
-        val s = if (active) factor else 1f
-        val anim = v.animate().scaleX(s).scaleY(s)
         // on glass a lifted tile also rises
-        if (glass() && liftStyle()) anim.translationY(if (active) -dp(8).toFloat() else 0f)
-        if (active) {
-            anim.setDuration(280).setInterpolator(OvershootInterpolator(1.8f))
-        } else {
-            anim.setDuration(180).setInterpolator(DecelerateInterpolator())
+        Motion.focus(v, active, factor) {
+            if (glass() && liftStyle()) translationY(if (active) -dp(8).toFloat() else 0f)
         }
-        anim.start()
     }
 
     // What a tile draws over its artwork: on glass, a white ring while it is lifted, and nothing otherwise. A thin light
@@ -362,6 +384,10 @@ class MainActivity : Activity() {
     private fun buildPill() {
         pill = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
+            // A focused button is scaled up. The bar clips its buttons to its children area and to its padding, and both cut the
+            // circle of the focus flat at the top and the bottom.
+            clipChildren = false
+            clipToPadding = false
             setPadding(dp(8), dp(6), dp(8), dp(6))
         }
         pill.background = pillBackground()
@@ -463,7 +489,11 @@ class MainActivity : Activity() {
         isFocusable = true
         foreground = pillMark()
         setOnClickListener { onClick() }
-        setOnFocusChangeListener { v, f -> (v as ImageView).setColorFilter(if (f) inkFocus() else inkMuted()) }
+        setOnFocusChangeListener { v, f ->
+            (v as ImageView).setColorFilter(if (f) inkFocus() else inkMuted())
+            // the spring only. A tile in the dock rises as well, but a button must stay inside the bar, which cut it off
+            Motion.focus(v, f, focusScale())
+        }
     }
 
     // opens the first action that some app on the device handles
@@ -657,7 +687,7 @@ class MainActivity : Activity() {
         val cell = dockFrame(h)
         val tile = newTile().apply {
             tag = ROUND
-            background = GlassDrawable(this, { if (Corners.square) 0f else -1f }, Color.argb(0x14, 255, 255, 255), 0x57, 0x1F, bake = false)
+            background = GlassDrawable(this, { if (Corners.square) 0f else -1f }, look(Pane.BUTTON).tint, look(Pane.BUTTON).top, look(Pane.BUTTON).bottom, bake = false)
             addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_apps)
                 setColorFilter(Color.WHITE)
@@ -702,7 +732,7 @@ class MainActivity : Activity() {
     }
 
     // a capsule sits in a cell that is scaled up, so it is drawn as shapes, which stay sharp, and not as a bitmap, which does not
-    private fun capsule(view: View) = GlassDrawable(view, { -1f }, Color.argb(0x38, 44, 22, 110), 0x4D, 0x1A, bake = false)
+    private fun capsule(view: View) = GlassDrawable(view, { -1f }, look(Pane.CAPSULE).tint, look(Pane.CAPSULE).top, look(Pane.CAPSULE).bottom, bake = false)
 
     private fun dockFocused(cell: View, tile: View, name: View?, focused: Boolean, factor: Float) {
         cell.isActivated = focused
@@ -853,9 +883,9 @@ class MainActivity : Activity() {
         if (glass()) {
             allBg.background = LayerDrawable(
                 arrayOf(
-                    GlassDrawable(allBg, { 0f }, Color.argb(0x57, 24, 10, 64), dim = true, bake = false),
+                    GlassDrawable(allBg, { 0f }, look(Pane.DIM).tint, dim = true, bake = false),
                     InsetDrawable(
-                        GlassDrawable(allBg, { Corners.radius(dp(24).toFloat()) }, Color.argb(0x33, 44, 22, 110), 0x42, 0x14, bake = false),
+                        GlassDrawable(allBg, { Corners.radius(dp(24).toFloat()) }, look(Pane.SHEET).tint, look(Pane.SHEET).top, look(Pane.SHEET).bottom, bake = false),
                         dp(SHEET_SIDE), dp(SHEET_EDGE), dp(SHEET_SIDE), dp(SHEET_EDGE),
                     ),
                 ),
@@ -1055,7 +1085,7 @@ class MainActivity : Activity() {
     private val TILE_H by lazy { dp(88) }
     private val ROOM by lazy { dp(12) }
     private val GAP by lazy { dp(18) }
-    private val OPEN_SCALE = 0.94f
+    private val OPEN_SCALE = Motion.OPEN_SCALE
 
     private companion object {
         // the dock fits this many tiles on one screen
