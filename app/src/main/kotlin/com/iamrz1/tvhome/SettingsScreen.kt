@@ -233,6 +233,12 @@ class SettingsScreen(
                     changed()
                 }
             }),
+            Section("Style", HomeStyle.entries.map { style ->
+                Option(style.label, checked = style == prefs.homeStyle) {
+                    prefs.homeStyle = style
+                    changed()
+                }
+            }),
             Section("Icon shape", IconShape.entries.map { shape ->
                 Option(shape.label, checked = shape == prefs.iconShape) {
                     prefs.iconShape = shape
@@ -246,8 +252,9 @@ class SettingsScreen(
                 }
             }),
         )
-        Page.DOCK -> listOf(
-            Section("Opacity", OPACITIES.map { pct ->
+        Page.DOCK -> listOfNotNull(
+            // the Apple TV style has no dock card to make clear
+            if (prefs.homeStyle != HomeStyle.CLASSIC) null else Section("Opacity", OPACITIES.map { pct ->
                 Option("$pct%", checked = pct == prefs.dockOpacity) {
                     prefs.dockOpacity = pct
                     changed()

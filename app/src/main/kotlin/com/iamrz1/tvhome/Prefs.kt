@@ -16,6 +16,11 @@ enum class FocusStyle(val label: String) {
     LIFT("Lift"),
 }
 
+enum class HomeStyle(val label: String) {
+    APPLE_TV("Apple TV"),
+    CLASSIC("Classic"),
+}
+
 enum class IconShape(val label: String) {
     RECTANGLE("Rectangle"),
     ROUNDED("Rounded corners"),
@@ -36,6 +41,10 @@ class Prefs(context: Context) {
     var focusStyle: FocusStyle
         get() = FocusStyle.entries.getOrElse(sp.getInt(KEY_FOCUS, FocusStyle.LIFT.ordinal)) { FocusStyle.LIFT }
         set(v) = sp.edit().putInt(KEY_FOCUS, v.ordinal).apply()
+
+    var homeStyle: HomeStyle
+        get() = HomeStyle.entries.getOrElse(sp.getInt(KEY_STYLE, HomeStyle.CLASSIC.ordinal)) { HomeStyle.CLASSIC }
+        set(v) = sp.edit().putInt(KEY_STYLE, v.ordinal).apply()
 
     var iconShape: IconShape
         get() = IconShape.entries.getOrElse(sp.getInt(KEY_SHAPE, IconShape.ROUNDED.ordinal)) { IconShape.ROUNDED }
@@ -91,6 +100,7 @@ class Prefs(context: Context) {
         private const val KEY_THEME = "theme"
         private const val KEY_FOCUS = "focus"
         private const val KEY_SHAPE = "icon_shape"
+        private const val KEY_STYLE = "home_style"
         private const val KEY_DOCK = "dock"
         private const val KEY_DOCK_OPACITY = "dock_opacity"
         private const val KEY_PILL = "pill"

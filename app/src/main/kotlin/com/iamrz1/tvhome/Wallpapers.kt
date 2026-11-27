@@ -1,11 +1,14 @@
 package com.iamrz1.tvhome
 
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.ShapeDrawable
-import android.graphics.drawable.shapes.RectShape
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -15,19 +18,51 @@ class Wallpaper(val name: String, val light: Boolean, private val angle: Int, va
     private val colors = IntArray(hex.size) { Color.parseColor(hex[it]) }
     private val stops = FloatArray(hex.size) { it / (hex.size - 1f) }
 
-    fun drawable(): Drawable = ShapeDrawable(RectShape()).apply {
-        shaderFactory = object : ShapeDrawable.ShaderFactory() {
-            override fun resize(width: Int, height: Int): Shader {
-                val rad = Math.toRadians(angle.toDouble())
-                val dx = cos(rad).toFloat()
-                val dy = sin(rad).toFloat()
-                // the line runs through the center and is long enough to reach both corners
-                val half = (abs(dx) * width + abs(dy) * height) / 2
-                val cx = width / 2f
-                val cy = height / 2f
-                return LinearGradient(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half, colors, stops, Shader.TileMode.CLAMP)
-            }
+    fun drawable() = Gradient(colors, stops, angle)
+
+    /** Gradient draws the colors along its angle, which [drift] can turn by a few degrees to make the wallpaper move. */
+    class Gradient(private val colors: IntArray, private val stops: FloatArray, private val angle: Int) : Drawable() {
+        private val paint = Paint()
+        private var drift = 0f
+
+        fun drift(degrees: Float) {
+            drift = degrees
+            paint.shader = null
+            invalidateSelf()
         }
+
+        override fun draw(canvas: Canvas) {
+            val b = bounds
+            if (b.isEmpty) return
+            if (paint.shader == null) paint.shader = shader(b.width(), b.height())
+            canvas.drawRect(b, paint)
+        }
+
+        override fun onBoundsChange(bounds: Rect) {
+            paint.shader = null
+        }
+
+        private fun shader(width: Int, height: Int): Shader {
+            val rad = Math.toRadians((angle + drift).toDouble())
+            val dx = cos(rad).toFloat()
+            val dy = sin(rad).toFloat()
+            // the line runs through the center and is long enough to reach both corners
+            val half = (abs(dx) * width + abs(dy) * height) / 2
+            val cx = width / 2f
+            val cy = height / 2f
+            return LinearGradient(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half, colors, stops, Shader.TileMode.CLAMP)
+        }
+
+        override fun setAlpha(alpha: Int) {
+            paint.alpha = alpha
+        }
+
+        override fun setColorFilter(filter: ColorFilter?) {
+            paint.colorFilter = filter
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = PixelFormat.OPAQUE
     }
 }
 

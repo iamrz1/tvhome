@@ -28,6 +28,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.ViewOutlineProvider
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.AbsListView
 import android.widget.AdapterView
 import android.widget.BaseAdapter
@@ -42,6 +43,7 @@ import android.widget.Toast
 import java.util.Collections
 import kotlin.concurrent.thread
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
@@ -67,6 +69,8 @@ class MainActivity : Activity() {
 
     private val adapter = AppsAdapter()
     private val icons = HashMap<String, Drawable>()
+    private val tileColors = HashMap<String, IntArray>()
+    private var wallpaper: Wallpaper.Gradient? = null
     private var rowHeight = 0
     private var selectedCell: View? = null
     private var customizeButton: View? = null
@@ -82,7 +86,7 @@ class MainActivity : Activity() {
         Panel.dark = palette.dark
         Corners.square = prefs.iconShape == IconShape.RECTANGLE
         root = FrameLayout(this)
-        root.background = Wallpapers.get(prefs.wallpaper).drawable()
+        setWallpaper()
         setContentView(root)
         buildPill()
         buildDock()
@@ -95,15 +99,18 @@ class MainActivity : Activity() {
         super.onResume()
         apps = Apps.load(this)
         icons.clear()
+        tileColors.clear()
         adapter.notifyDataSetChanged()
         rebuildDock()
         ui.removeCallbacks(weatherTick)
         weatherTick.run()
+        driftWallpaper()
     }
 
     override fun onPause() {
         super.onPause()
         ui.removeCallbacks(weatherTick)
+        ui.removeCallbacks(drift)
         endMove()
     }
 
@@ -150,6 +157,25 @@ class MainActivity : Activity() {
         return super.dispatchKeyEvent(e)
     }
 
+    private fun setWallpaper() {
+        wallpaper = Wallpapers.get(prefs.wallpaper).drawable().also { root.background = it }
+    }
+
+    // The Apple TV style lets the wallpaper drift slowly, by turning its gradient a few degrees back and forth. It moves
+    // in small steps a few times a second, which is smooth enough for something this slow and cheap for a weak device.
+    private val drift = object : Runnable {
+        override fun run() {
+            val t = (System.currentTimeMillis() % DRIFT_MS) / DRIFT_MS.toDouble()
+            wallpaper?.drift((DRIFT_DEGREES * sin(t * 2 * Math.PI)).toFloat())
+            ui.postDelayed(this, DRIFT_STEP_MS)
+        }
+    }
+
+    private fun driftWallpaper() {
+        ui.removeCallbacks(drift)
+        if (apple()) drift.run() else wallpaper?.drift(0f)
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun round(color: Int, radiusDp: Int) = GradientDrawable().apply {
@@ -160,13 +186,34 @@ class MainActivity : Activity() {
     private fun circle() = prefs.iconShape == IconShape.CIRCLE
 
     // the corner radius of a tile: none for a rectangle, and half the height for a circle, which is as wide as it is high
-    private fun tileRadius() = when (prefs.iconShape) {
+    private fun tileRadius(height: Int = TILE_H) = when (prefs.iconShape) {
         IconShape.RECTANGLE -> 0f
         IconShape.ROUNDED -> dp(14).toFloat()
-        IconShape.CIRCLE -> TILE_H / 2f
+        IconShape.CIRCLE -> height / 2f
     }
 
-    private fun tileWidth() = if (circle()) TILE_H else TILE_W
+    private fun tileWidth(width: Int = TILE_W, height: Int = TILE_H) = if (circle()) height else width
+
+    private fun apple() = prefs.homeStyle == HomeStyle.APPLE_TV
+
+    // The Apple TV dock has bigger tiles, about five to a screen, so the next one shows at the edge and says there is
+    // more. The size follows the screen, so it looks the same on any of them.
+    private fun dockTileW() = if (apple()) {
+        (resources.displayMetrics.widthPixels / 5.1f).toInt().coerceIn(dp(150), dp(200))
+    } else {
+        TILE_W
+    }
+
+    private fun dockTileH() = if (apple()) dockTileW() * 9 / 16 else TILE_H
+
+    // the room around a dock tile is for the highlight, and the Apple TV shadow is a big one
+    private fun dockRoom() = if (apple()) dp(26) else ROOM
+
+    private fun dockGap() = if (apple()) dp(30) else GAP
+
+    private fun lightFont() = Typeface.create("sans-serif-light", Typeface.NORMAL)
+
+    private fun mediumFont() = Typeface.create("sans-serif-medium", Typeface.NORMAL)
 
     // a circle shows the name under it all the time, and the lift style shows the name of the selected tile
     private fun namesBelow() = circle() || liftStyle()
@@ -179,11 +226,14 @@ class MainActivity : Activity() {
         palette = Palette.resolve(prefs.themeMode, resources.configuration, prefs.dockOpacity)
         Panel.dark = palette.dark
         Corners.square = prefs.iconShape == IconShape.RECTANGLE
-        pill.background = round(palette.pill, 30)
-        dockScroll.background = dockBackground()
+        pill.background = if (apple()) ColorDrawable(Color.TRANSPARENT) else round(palette.pill, 30)
+        layoutDock()
         allApps.setBackgroundColor(palette.overlay)
         allTitle.setTextColor(palette.label)
+        allTitle.typeface = if (apple()) lightFont() else Typeface.DEFAULT
+        allTitle.textSize = if (apple()) 30f else 24f
         fillPill()
+        driftWallpaper()
         rebuildDock()
         // new cells, because the grid rows are taller when the focus style shows names
         grid.adapter = adapter
@@ -196,7 +246,7 @@ class MainActivity : Activity() {
     private fun focusScale() = if (liftStyle()) LIFT_SCALE else FOCUS_SCALE
 
     // the dock card has a thin edge, so it still reads as a card when it is clear
-    private fun dockBackground() = GradientDrawable().apply {
+    private fun dockBackground(): Drawable = if (apple()) ColorDrawable(Color.TRANSPARENT) else GradientDrawable().apply {
         setColor(palette.dock)
         // the dock follows the icons when they are rectangles
         cornerRadius = Corners.radius(dp(28).toFloat())
@@ -226,13 +276,17 @@ class MainActivity : Activity() {
 
     // What a dock or grid cell draws behind its tile while the tile is focused (activated) or selected. Both styles
     // are drawn in the room around the tile, so the artwork is never covered and nothing is cut off.
-    private fun cellBackground(): Drawable {
-        val mark: Drawable = if (liftStyle()) {
-            GlowDrawable(withAlpha(Color.BLACK, 0x80), tileRadius(), dp(8).toFloat(), tileWidth(), TILE_H, dp(3).toFloat())
+    private fun cellBackground(width: Int = TILE_W, height: Int = TILE_H): Drawable {
+        val w = tileWidth(width, height)
+        val r = tileRadius(height)
+        val mark: Drawable = if (liftStyle() && apple()) {
+            GlowDrawable(withAlpha(Color.BLACK, 0x70), r, dp(14).toFloat(), w, height, dp(9).toFloat())
+        } else if (liftStyle()) {
+            GlowDrawable(withAlpha(Color.BLACK, 0x80), r, dp(8).toFloat(), w, height, dp(3).toFloat())
         } else if (glowStyle()) {
-            GlowDrawable(withAlpha(Color.WHITE, 0xC0), tileRadius(), dp(10).toFloat(), tileWidth(), TILE_H)
+            GlowDrawable(withAlpha(Color.WHITE, 0xC0), r, dp(10).toFloat(), w, height)
         } else {
-            ringFrame(palette.focus, 3)
+            ringFrame(palette.focus, 3, w, height)
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_activated), mark)
@@ -241,12 +295,29 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun ringFrame(color: Int, strokeDp: Int) =
-        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), tileRadius(), tileWidth(), TILE_H)
+    private fun ringFrame(color: Int, strokeDp: Int, width: Int = tileWidth(), height: Int = TILE_H) =
+        RingDrawable(color, dp(strokeDp).toFloat(), dp(2).toFloat(), tileRadius(height), width, height)
 
+    // the Apple TV style springs up past its size and settles
     private fun scaleTo(v: View, active: Boolean, factor: Float = focusScale()) {
         val s = if (active) factor else 1f
-        v.animate().scaleX(s).scaleY(s).setDuration(120).start()
+        val anim = v.animate().scaleX(s).scaleY(s)
+        if (apple() && active) {
+            anim.setDuration(280).setInterpolator(OvershootInterpolator(1.8f))
+        } else {
+            anim.setDuration(if (apple()) 180 else 120).setInterpolator(DecelerateInterpolator())
+        }
+        anim.start()
+    }
+
+    // a faint shine across the focused tile
+    private fun shine(height: Int = TILE_H): Drawable = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(withAlpha(Color.WHITE, 0x61), withAlpha(Color.WHITE, 0x00)),
+    ).apply { cornerRadius = tileRadius(height) }
+
+    private fun showShine(tile: View?, on: Boolean, height: Int = TILE_H) {
+        tile?.foreground = if (on && apple() && liftStyle()) shine(height) else null
     }
 
     private fun icon(app: AppEntry): Drawable =
@@ -256,7 +327,7 @@ class MainActivity : Activity() {
         pill = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = round(palette.pill, 30)
+            background = if (apple()) ColorDrawable(Color.TRANSPARENT) else round(palette.pill, 30)
         }
         root.addView(
             pill,
@@ -272,7 +343,8 @@ class MainActivity : Activity() {
         if (PillItem.CLOCK in on) pill.addView(TextClock(this).apply {
             format24Hour = "HH:mm"
             format12Hour = "HH:mm"
-            textSize = 22f
+            textSize = if (apple()) 28f else 22f
+            if (apple()) typeface = lightFont()
             setTextColor(palette.muted)
             setPadding(dp(14), 0, dp(10), 0)
         })
@@ -296,7 +368,8 @@ class MainActivity : Activity() {
     private fun buildWeather(): View {
         val icon = ImageView(this).apply { setColorFilter(palette.muted) }
         val temp = TextView(this).apply {
-            textSize = 20f
+            textSize = if (apple()) 24f else 20f
+            if (apple()) typeface = lightFont()
             setTextColor(palette.muted)
             setPadding(dp(6), 0, 0, 0)
         }
@@ -382,15 +455,26 @@ class MainActivity : Activity() {
             clipChildren = false
             // without this the row clips the scaled cells at its padding, which cuts the highlight at both ends
             clipToPadding = false
-            // the end padding keeps the scaled highlight of the first and last cell inside the dock
-            setPadding(dp(20), dp(8), dp(20), dp(8))
         }
         dockScroll.addView(dockRow)
-        root.addView(
-            dockScroll,
-            FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM)
-                .apply { setMargins(dp(20), 0, dp(20), dp(32)) },
-        )
+        root.addView(dockScroll, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
+        layoutDock()
+    }
+
+    // The classic dock is a card at the bottom. The Apple TV dock is a free row, left aligned, that sits higher and
+    // keeps room under it for the name of the focused tile.
+    private fun layoutDock() {
+        dockScroll.background = dockBackground()
+        val lp = dockScroll.layoutParams as FrameLayout.LayoutParams
+        if (apple()) {
+            lp.setMargins(0, 0, 0, dp(70))
+            // the end padding keeps the scaled highlight of the first and last cell inside the row
+            dockRow.setPadding(dp(45), dp(8), dp(45), dp(44))
+        } else {
+            lp.setMargins(dp(20), 0, dp(20), dp(32))
+            dockRow.setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        dockScroll.layoutParams = lp
     }
 
     private fun visibleDock(): List<String> {
@@ -409,6 +493,7 @@ class MainActivity : Activity() {
         val byPkg = apps.associateBy { it.pkg }
         dockRow.removeAllViews()
         for (pkg in visibleDock()) byPkg[pkg]?.let { dockRow.addView(dockCell(it)) }
+        if (apple()) dockRow.addView(allAppsCell())
         if (dockRow.childCount == 0) dockRow.addView(TextView(this).apply {
             text = "Press Down for all apps"
             setTextColor(palette.muted)
@@ -425,17 +510,60 @@ class MainActivity : Activity() {
         outlineProvider = ViewOutlineProvider.BACKGROUND
     }
 
-    private fun bindTile(tile: FrameLayout, app: AppEntry) {
+    // The colors of a tile that has no banner: a gradient of the hue of the icon, pale on the light theme and deep on the
+    // dark one.
+    private fun blend(from: Int, to: Int, part: Float): Int {
+        fun mix(a: Int, b: Int) = (a + (b - a) * part).toInt()
+        return Color.rgb(mix(Color.red(from), Color.red(to)), mix(Color.green(from), Color.green(to)), mix(Color.blue(from), Color.blue(to)))
+    }
+
+    private fun iconGradient(app: AppEntry): IntArray = tileColors.getOrPut(app.pkg) {
+        val size = 24
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val icon = app.info.loadIcon(packageManager)
+        icon.setBounds(0, 0, size, size)
+        icon.draw(Canvas(bmp))
+        var r = 0f
+        var g = 0f
+        var b = 0f
+        var weight = 0f
+        val hsv = FloatArray(3)
+        for (x in 0 until size) for (y in 0 until size) {
+            val c = bmp.getPixel(x, y)
+            if (Color.alpha(c) < 128) continue
+            Color.colorToHSV(c, hsv)
+            // saturated pixels say more about the icon than white or black ones
+            val w = 0.05f + hsv[1] * hsv[2]
+            r += Color.red(c) * w
+            g += Color.green(c) * w
+            b += Color.blue(c) * w
+            weight += w
+        }
+        if (weight == 0f) return@getOrPut intArrayOf(palette.tile, palette.tile)
+        val base = Color.rgb((r / weight).toInt(), (g / weight).toInt(), (b / weight).toInt())
+        if (palette.dark) {
+            intArrayOf(blend(base, Color.BLACK, 0.5f), blend(base, Color.BLACK, 0.7f))
+        } else {
+            intArrayOf(blend(base, Color.WHITE, 0.82f), blend(base, Color.WHITE, 0.62f))
+        }
+    }
+
+    private fun bindTile(tile: FrameLayout, app: AppEntry, height: Int = TILE_H) {
         tile.removeAllViews()
-        tile.background = GradientDrawable().apply {
-            setColor(palette.tile)
-            cornerRadius = tileRadius()
+        val gradient = apple() && !circle()
+        tile.background = if (gradient) {
+            GradientDrawable(GradientDrawable.Orientation.TL_BR, iconGradient(app)).apply { cornerRadius = tileRadius(height) }
+        } else {
+            GradientDrawable().apply {
+                setColor(palette.tile)
+                cornerRadius = tileRadius(height)
+            }
         }
         // a circle shows the app icon, because a wide banner does not fit in it
         val art = if (circle()) app.info.loadIcon(packageManager) else app.info.activityInfo.loadBanner(packageManager)
         if (art != null) {
             tile.addView(ImageView(this).apply {
-                setImageDrawable(RoundedBanner(art, tileRadius(), fillCorners = !circle()))
+                setImageDrawable(RoundedBanner(art, tileRadius(height), fillCorners = !circle()))
                 scaleType = ImageView.ScaleType.FIT_XY
             })
             return
@@ -444,11 +572,13 @@ class MainActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
+                // the Apple TV style shows the name of the focused tile only, so the icon can be bigger
+                val size = if (apple()) minOf(dp(56), height * 3 / 5) else dp(44)
                 addView(ImageView(context).apply {
                     setImageDrawable(icon(app))
-                    layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+                    layoutParams = LinearLayout.LayoutParams(size, size)
                 })
-                addView(TextView(context).apply {
+                if (!apple()) addView(TextView(context).apply {
                     text = app.label
                     textSize = 14f
                     setTextColor(palette.label)
@@ -465,24 +595,86 @@ class MainActivity : Activity() {
     // A dock cell is the tile plus room around it for the highlight. The cell scales, so the highlight scales with the
     // tile. The negative side margins let cells overlap their room, which leaves GAP between two tiles.
     private fun dockCell(app: AppEntry): View {
-        val cell = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(TILE_W + 2 * ROOM, TILE_H + 2 * ROOM)
-                .apply { setMargins(GAP / 2 - ROOM, 0, GAP / 2 - ROOM, 0) }
-            clipChildren = false
-            background = cellBackground()
-        }
+        val h = dockTileH()
+        val cell = dockFrame()
+        var name: View? = null
         val tile = newTile().apply {
-            bindTile(this, app)
+            bindTile(this, app, h)
             isFocusable = true
             setOnClickListener { Apps.launch(context, app) }
             setOnLongClickListener { showAppMenu(app, it); true }
-            setOnFocusChangeListener { _, f ->
-                cell.isActivated = f
-                scaleTo(cell, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale())
-            }
+            setOnFocusChangeListener { _, f -> dockFocused(cell, this, name, f, if (app.pkg == movingPkg) MOVE_SCALE else focusScale()) }
         }
-        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(), TILE_H, Gravity.CENTER))
+        // the tile is the first child of the cell. The Apple TV style fades the name in under the focused tile.
+        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
+        if (apple()) name = nameUnder(cell, app.label)
         return cell
+    }
+
+    // the Apple TV dock ends with a tile that opens all apps
+    private fun allAppsCell(): View {
+        val h = dockTileH()
+        val cell = dockFrame()
+        val tile = newTile().apply {
+            background = GradientDrawable().apply {
+                setColor(withAlpha(if (palette.dark) Color.WHITE else Color.WHITE, if (palette.dark) 0x29 else 0x57))
+                setStroke(dp(1), withAlpha(Color.WHITE, 0x8C))
+                cornerRadius = tileRadius(h)
+            }
+            addView(
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    addView(ImageView(context).apply {
+                        setImageResource(R.drawable.ic_apps)
+                        setColorFilter(palette.label)
+                    }, LinearLayout.LayoutParams(dp(40), dp(40)))
+                    addView(TextView(context).apply {
+                        text = "All apps"
+                        textSize = 15f
+                        typeface = mediumFont()
+                        setTextColor(palette.label)
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(4), 0, 0)
+                    })
+                },
+                FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT),
+            )
+            contentDescription = "All apps"
+            isFocusable = true
+            setOnClickListener { showAllApps() }
+            setOnFocusChangeListener { _, f -> dockFocused(cell, this, null, f, focusScale()) }
+        }
+        cell.addView(tile, FrameLayout.LayoutParams(tileWidth(dockTileW(), h), h, Gravity.CENTER))
+        return cell
+    }
+
+    private fun dockFrame() = FrameLayout(this).apply {
+        val room = dockRoom()
+        layoutParams = LinearLayout.LayoutParams(dockTileW() + 2 * room, dockTileH() + 2 * room)
+            .apply { setMargins(dockGap() / 2 - room, 0, dockGap() / 2 - room, 0) }
+        clipChildren = false
+        background = cellBackground(dockTileW(), dockTileH())
+    }
+
+    // the name hangs below the cell, in the room that the row keeps for it
+    private fun nameUnder(cell: FrameLayout, label: String) = TextView(this).apply {
+        text = label
+        textSize = 20f
+        typeface = mediumFont()
+        setTextColor(palette.label)
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        alpha = 0f
+        cell.addView(this, FrameLayout.LayoutParams(MATCH_PARENT, dp(28), Gravity.BOTTOM).apply { bottomMargin = -dp(18) })
+    }
+
+    private fun dockFocused(cell: View, tile: View, name: View?, focused: Boolean, factor: Float) {
+        cell.isActivated = focused
+        showShine(tile, focused, dockTileH())
+        name?.animate()?.alpha(if (focused) 1f else 0f)?.setDuration(160)?.start()
+        scaleTo(cell, focused, factor)
     }
 
     private fun tileOf(cell: View?) = (cell as? FrameLayout)?.getChildAt(0) as? FrameLayout
@@ -537,7 +729,7 @@ class MainActivity : Activity() {
         }
         val cell = dockRow.getChildAt(idx)
         val tile = tileOf(cell) ?: return
-        cell.background = ringFrame(Color.WHITE, 4)
+        cell.background = ringFrame(Color.WHITE, 4, tileWidth(dockTileW(), dockTileH()), dockTileH())
         tile.requestFocus()
         scaleTo(cell, true, MOVE_SCALE)
     }
@@ -561,7 +753,7 @@ class MainActivity : Activity() {
         movingPkg = null
         for (i in 0 until dockRow.childCount) dockRow.getChildAt(i).animate().alpha(1f).setDuration(120).start()
         val cell = dockRow.getChildAt(visibleDock().indexOf(pkg)) ?: return
-        cell.background = cellBackground()
+        cell.background = cellBackground(dockTileW(), dockTileH())
         scaleTo(cell, tileOf(cell)?.isFocused == true)
     }
 
@@ -570,38 +762,42 @@ class MainActivity : Activity() {
             numColumns = COLUMNS
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             selector = ColorDrawable(Color.TRANSPARENT)
-            clipChildren = false
+            // A row that has scrolled up must not show over the title. The grid clips at its own edge, so its padding is
+            // the room for what a selected tile draws outside its cell: the scale, the shadow and the name.
+            clipChildren = true
             clipToPadding = false
-            // the scaled name under a selected tile of the last row hangs below the row, and the grid clips at its edge
-            setPadding(0, 0, 0, dp(GRID_BOTTOM))
+            setPadding(dp(GRID_SIDE), dp(GRID_EDGE), dp(GRID_SIDE), dp(GRID_EDGE))
             adapter = this@MainActivity.adapter
             addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitRows() }
             setOnItemClickListener { _, _, pos, _ -> Apps.launch(this@MainActivity, apps[pos]) }
             setOnItemLongClickListener { _, view, pos, _ -> showAppMenu(apps[pos], view); true }
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
-                    selectedCell?.let { scaleTo(it, false); showName(it, false) }
-                    selectedCell = v?.also { scaleTo(it, true); showName(it, true) }
+                    selectedCell?.let { scaleTo(it, false); showName(it, false); showShine(tileOf(it), false) }
+                    selectedCell = v?.also { scaleTo(it, true); showName(it, true); showShine(tileOf(it), true) }
                 }
 
                 override fun onNothingSelected(p: AdapterView<*>) {
-                    selectedCell?.let { scaleTo(it, false); showName(it, false) }
+                    selectedCell?.let { scaleTo(it, false); showName(it, false); showShine(tileOf(it), false) }
                     selectedCell = null
                 }
             }
         }
         allTitle = TextView(this).apply {
             text = "All apps"
-            textSize = 24f
+            textSize = if (apple()) 30f else 24f
+            if (apple()) typeface = lightFont()
             setTextColor(palette.label)
-            setPadding(0, 0, 0, dp(16))
+            setPadding(dp(GRID_SIDE), 0, 0, dp(16 - GRID_EDGE))
         }
         allApps = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // a selected cell is scaled up, so the grid must be free to draw outside its own bounds
-            clipChildren = false
+            // The grid clips at its own edge, which keeps a scrolled row off the title, and its padding is the room that a
+            // selected cell needs for its scale. So this layout clips neither its padding nor its child.
+            clipChildren = true
+            clipToPadding = false
             setBackgroundColor(palette.overlay)
-            setPadding(dp(32), dp(40), dp(32), dp(24 - GRID_BOTTOM))
+            setPadding(dp(32 - GRID_SIDE), dp(40), dp(32 - GRID_SIDE), dp(24 - GRID_EDGE))
             visibility = View.GONE
             addView(allTitle)
             addView(grid, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
@@ -616,9 +812,22 @@ class MainActivity : Activity() {
         setHomeFocusable(false)
         allApps.visibility = View.VISIBLE
         allApps.alpha = 0f
-        allApps.translationY = SLIDE.toFloat()
-        allApps.animate().alpha(1f).translationY(0f).setDuration(ANIM_MS)
-            .setInterpolator(DecelerateInterpolator()).start()
+        if (apple()) {
+            // it opens over the home screen, which stays behind it, instead of sliding in as a page
+            allApps.pivotX = allApps.width / 2f
+            allApps.pivotY = allApps.height / 2f
+            allApps.scaleX = OPEN_SCALE
+            allApps.scaleY = OPEN_SCALE
+            allApps.translationY = 0f
+            allApps.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(ANIM_MS)
+                .setInterpolator(DecelerateInterpolator()).start()
+        } else {
+            allApps.scaleX = 1f
+            allApps.scaleY = 1f
+            allApps.translationY = SLIDE.toFloat()
+            allApps.animate().alpha(1f).translationY(0f).setDuration(ANIM_MS)
+                .setInterpolator(DecelerateInterpolator()).start()
+        }
         pill.animate().alpha(0f).setDuration(ANIM_MS).start()
         dockScroll.animate().alpha(0f).setDuration(ANIM_MS).start()
         grid.setSelection(0)
@@ -630,8 +839,9 @@ class MainActivity : Activity() {
         allAppsOpen = false
         setHomeFocusable(true)
         dockRow.getChildAt(dockFocus.coerceIn(0, dockRow.childCount - 1))?.requestFocus()
-        allApps.animate().alpha(0f).translationY(SLIDE.toFloat()).setDuration(ANIM_MS)
-            .setInterpolator(AccelerateInterpolator())
+        val close = allApps.animate().alpha(0f).setDuration(ANIM_MS).setInterpolator(AccelerateInterpolator())
+        if (apple()) close.scaleX(OPEN_SCALE).scaleY(OPEN_SCALE) else close.translationY(SLIDE.toFloat())
+        close
             .withEndAction { if (!allAppsOpen) allApps.visibility = View.GONE }
             .start()
         pill.animate().alpha(1f).setDuration(ANIM_MS).start()
@@ -660,7 +870,7 @@ class MainActivity : Activity() {
         override val palette get() = this@MainActivity.palette
 
         override fun apply() {
-            root.background = Wallpapers.get(prefs.wallpaper).drawable()
+            setWallpaper()
             applyTheme()
             refreshWeather()
         }
@@ -717,7 +927,7 @@ class MainActivity : Activity() {
                 // the name under a selected tile, for the focus styles that show it
                 addView(TextView(context).apply {
                     textSize = 15f
-                    typeface = Typeface.DEFAULT_BOLD
+                    typeface = if (apple()) mediumFont() else Typeface.DEFAULT_BOLD
                     letterSpacing = 0.05f
                     gravity = Gravity.CENTER
                     maxLines = 1
@@ -764,17 +974,22 @@ class MainActivity : Activity() {
     private val ROOM by lazy { dp(12) }
     private val GAP by lazy { dp(18) }
     private val SLIDE by lazy { dp(40) }
+    private val OPEN_SCALE = 0.94f
 
     private companion object {
         // the dock fits this many tiles on one screen
         const val MAX_DOCK = 5
         const val COLUMNS = 5
-        const val GRID_BOTTOM = 14
+        const val GRID_SIDE = 20
+        const val GRID_EDGE = 12
 
         // a row may be this much of the height it needs, so the rows can share the height of the grid
         const val MIN_ROW = 0.9f
         const val ANIM_MS = 200L
         const val WEATHER_MS = 30 * 60 * 1000L
+        const val DRIFT_MS = 120_000L
+        const val DRIFT_STEP_MS = 400L
+        const val DRIFT_DEGREES = 12.0
         const val FOCUS_SCALE = 1.06f
         const val LIFT_SCALE = 1.15f
         const val MOVE_SCALE = 1.15f
